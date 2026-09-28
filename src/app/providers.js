@@ -2,12 +2,12 @@
 
 import { SessionProvider } from "next-auth/react";
 import { useEffect } from "react";
-import config from "@/lib/config";
+import publicConfig from "@/lib/config.public";
 
 export function Providers({ children }) {
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const theme = config?.theme || "slate-indigo";
+      const theme = publicConfig?.theme || "slate-indigo";
       document.documentElement.setAttribute("data-theme", theme);
     }
   }, []);

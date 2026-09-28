@@ -1,117 +1,178 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import Footer from "@/components/Footer";
-import { FaCheck, FaInfoCircle } from "react-icons/fa";
+import { FaCheck } from "react-icons/fa";
 import axios from "axios";
+import { MAIN_PLANS } from "@/lib/plan-display";
 import toast, { Toaster } from "react-hot-toast";
 
-const PLANS = [
-  { id: "basic", name: "Basic Pack", price: "$5", credits: 100, description: "Perfect for testing custom prompts and exploring styles." },
-  { id: "standard", name: "Standard Pack", price: "$10", credits: 250, description: "Ideal for regular creators wanting high resolution outputs." },
-  { id: "pro", name: "Professional Pack", price: "$20", credits: 600, description: "Designed for power users demanding batch exports and high speed.", popular: true },
-  { id: "business", name: "Business Pack", price: "$50", credits: 2000, description: "Maximum value pack for agency workflows and large volume generations." }
+// 分站单张 SKU：仅在分站域名下展示（后端同款定价，客户钱进站长商户）
+const TENANT_PLANS = [
+  { id: "single_std", name: "AI 写真·标准单张", price: "¥29.9", credits: 2, membershipDays: 0, shots: "1 张标准质感成片", expires: "成片永久保存", tier: "标准质感", popular: false, description: "先试一张，满意再拍。" },
+  { id: "single_hd", name: "AI 写真·高清单张", price: "¥39.9", credits: 4, membershipDays: 0, shots: "1 张高清质感成片", expires: "成片永久保存", tier: "高清质感", popular: true, description: "社交头像、展示面首选。" },
+  { id: "single_flag", name: "AI 写真·旗舰单张", price: "¥69.9", credits: 6, membershipDays: 0, shots: "1 张旗舰质感成片", expires: "成片永久保存", tier: "旗舰质感", popular: false, description: "人脸一致性最好，精修交付。" }
 ];
 
-export default function Pricing() {
-  const { data: session, status } = useSession();
-  const [loadingPlan, setLoadingPlan] = useState(null);
+// 需要登录的操作一律直接跳登录页，登录完回到充值页
+const PRICING_LOGIN_URL = `/login?callbackUrl=${encodeURIComponent("/pricing")}`;
 
-  const handleCheckout = async (planId) => {
+export default function Pricing() {
+  const { status } = useSession();
+  const [loadingPlan, setLoadingPlan] = useState(null);
+  const [manualOrder, setManualOrder] = useState(null);
+
+  useEffect(() => {
+    // 易支付付款成功后跳回 ?success=true，提示到账（积分以后端入账为准）
+    if (typeof window !== "undefined" && window.location.search.includes("success=true")) {
+      toast("已返回支付页面，到账状态请以购买记录为准。", { duration: 6000 });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  // 分站域名下（反代注入 __TENANT_NAME__）展示单张 SKU 货架，隐藏主站套餐与人工转账入口
+  const [tenantName, setTenantName] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/subsite/info")
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => { if (!cancelled && payload?.data?.siteName) setTenantName(payload.data.siteName); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const visiblePlans = tenantName ? TENANT_PLANS : MAIN_PLANS;
+
+  const handleCheckout = async (planId, type = "alipay") => {
     if (status !== "authenticated") {
-      toast.error("You must sign in with Google to purchase credit packages.");
+      window.location.assign(PRICING_LOGIN_URL);
       return;
     }
-
-    setLoadingPlan(planId);
+    const key = `${planId}:${type}`;
+    setLoadingPlan(key);
     try {
-      const { data } = await axios.post("/api/checkout", { planId });
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error("No redirection URL returned");
-      }
+      const { data } = await axios.post("/api/checkout/epay", { planId, type });
+      window.location.assign(data.url);
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.error || "Failed to trigger Stripe checkout session.");
+      if (err.response?.status === 401) {
+        window.location.assign(PRICING_LOGIN_URL);
+        return;
+      }
+      toast.error(err.response?.data?.error || "订单创建失败，请稍后重试。");
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
+
+  const handleManualOrder = async (planId) => {
+    if (status !== "authenticated") {
+      window.location.assign(PRICING_LOGIN_URL);
+      return;
+    }
+    setLoadingPlan(`${planId}:manual`);
+    try {
+      const { data } = await axios.post("/api/manual-orders", { planId });
+      setManualOrder(data);
+    } catch (err) {
+      if (err.response?.status === 401) {
+        window.location.assign(PRICING_LOGIN_URL);
+        return;
+      }
+      toast.error(err.response?.data?.error || "订单创建失败，请稍后重试。");
     } finally {
       setLoadingPlan(null);
     }
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-bg-page select-none text-primary-text overflow-hidden">
-      <Toaster position="top-right" />
+    <div className="mf-pricing-shell">
+      <Toaster position="top-right" toastOptions={{ style: { background: "#211b15", color: "#f4ead7", border: "1px solid rgba(220,178,103,.28)" } }} />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-12 sm:px-6 lg:px-8 flex flex-col gap-10 overflow-y-auto scrollbar-subtle items-center">
-        <div className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full mb-1">
-            <FaInfoCircle className="text-primary text-xs" />
-            <span className="text-[10px] font-black text-primary uppercase tracking-widest">Pricing Plans</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight uppercase">Buy Credits Packs</h1>
-          <p className="text-xs sm:text-sm text-secondary-text max-w-lg leading-relaxed">
-            Purchase flexible credit packages to perform high-resolution predictions. Keep all profits — we handle AI infrastructure.
+      <main className="mf-pricing-main">
+        <div className="mf-pricing-header">
+          <Link className="mf-pricing-back" href="/">‹ 返回首页</Link>
+          <div className="mf-pricing-mark"><span>型</span><b>型男制造机</b></div>
+          <span className="mf-auth-kicker">PERSONAL IMAGE STUDIO</span>
+          <h1>{tenantName ? `${tenantName} · AI 写真` : "让改变，真正发生在照片里"}</h1>
+          <p>{tenantName
+            ? "拍一张算一张，付款即拍，成片永久保存，失败自动全额退款。"
+            : "三档差价不大，就是效果不同——日常够用选 ¥39.9，质量要求高直接 ¥99，别纠结。生成次数可混用：照片 / 试穿 / 诊断都行，失败自动退回。"}
           </p>
         </div>
 
-        {/* Pricing Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-5xl">
-          {PLANS.map((plan) => (
+        <div className="mf-plan-grid">
+          {visiblePlans.map((plan) => (
             <div
               key={plan.id}
-              className={`relative bg-bg-card border rounded-lg p-6 flex flex-col justify-between gap-6 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${
-                plan.popular ? "border-primary shadow-xl shadow-primary/5 scale-105" : "border-divider/50 shadow-md"
-              }`}
+              className={`mf-plan-card ${plan.popular ? "mf-plan-card-popular" : ""}`}
             >
               {plan.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-[9px] font-black uppercase px-3 py-1 rounded-full tracking-wider shadow">
-                  Most Popular
-                </span>
+                <span className="mf-plan-ribbon">🔥 9 成用户选这档</span>
               )}
 
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-extrabold uppercase tracking-wide text-primary-text">{plan.name}</h3>
-                  <p className="text-2xl font-black tracking-tight text-white">{plan.price}</p>
-                </div>
-                
-                <div className="text-xs bg-bg-page/50 border border-divider/30 p-3 rounded text-center font-extrabold text-primary">
-                  {plan.credits} Art Credits
-                </div>
+              <div className="mf-plan-body">
+                <div className="mf-plan-title"><span>{plan.tier}</span><h2>{plan.name}</h2></div>
+                <p className="mf-plan-hook">{plan.hook}</p>
+                <div className="mf-plan-price">{plan.price}<small> / 套</small></div>
+                <div className="mf-plan-credits"><strong>{plan.credits} 次生成额度</strong><span style={{ display: "block", marginTop: 3, fontSize: 10, color: "#9e9281" }}>{plan.shots}</span></div>
+                <p className="mf-plan-description">{plan.description}</p>
 
-                <p className="text-xs text-secondary-text leading-relaxed font-medium min-h-[3rem]">{plan.description}</p>
-                
-                <ul className="space-y-2 border-t border-divider/30 pt-4 text-xs font-semibold text-secondary-text">
-                  <li className="flex items-center gap-2">
-                    <FaCheck className="text-primary text-[10px]" />
-                    <span>Dynamic aspect ratios</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <FaCheck className="text-primary text-[10px]" />
-                    <span>HD image downloads</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <FaCheck className="text-primary text-[10px]" />
-                    <span>No subscription required</span>
-                  </li>
+                <ul className="mf-plan-features">
+                  {plan.membershipDays > 0 && <li><FaCheck />会员期内每日 3 次 AI 形象诊断</li>}
+                  <li><FaCheck />{plan.tier}</li>
+                  <li><FaCheck />{plan.expires}</li>
+                  <li><FaCheck />失败自动退回次数</li>
                 </ul>
               </div>
 
-              <button
-                onClick={() => handleCheckout(plan.id)}
-                disabled={loadingPlan !== null}
-                className={`w-full py-3 rounded-full text-xs font-bold transition-all shadow-md cursor-pointer select-none active:scale-[0.98] ${
-                  plan.popular ? "bg-primary text-white hover:bg-primary-hover shadow-primary/15" : "bg-bg-page hover:bg-bg-card text-primary-text border border-divider"
-                }`}
-              >
-                {loadingPlan === plan.id ? "Loading checkout..." : "Purchase Credits"}
-              </button>
+              <div className="mf-plan-actions">
+                <button
+                  onClick={() => handleCheckout(plan.id, "alipay")}
+                  disabled={loadingPlan !== null}
+                  className={`mf-plan-action ${plan.popular ? "mf-plan-action-primary" : ""}`}
+                >
+                  {loadingPlan === `${plan.id}:alipay` ? "正在跳转…" : "支付宝购买"}
+                </button>
+                <button
+                  onClick={() => handleCheckout(plan.id, "wxpay")}
+                  disabled={loadingPlan !== null}
+                  className="mf-plan-action"
+                >
+                  {loadingPlan === `${plan.id}:wxpay` ? "正在跳转…" : "微信购买"}
+                </button>
+              </div>
+              {!tenantName && (
+                <button
+                  onClick={() => handleManualOrder(plan.id)}
+                  disabled={loadingPlan !== null}
+                  className="mf-manual-link"
+                >
+                  {loadingPlan === `${plan.id}:manual` ? "正在创建…" : "无法在线支付？转账+人工开通"}
+                </button>
+              )}
             </div>
           ))}
         </div>
       </main>
+
+      {manualOrder && (
+        <div className="mf-payment-overlay">
+          <div className="mf-payment-card">
+            <button className="mf-payment-close" onClick={() => setManualOrder(null)} aria-label="关闭">×</button>
+            <span className="mf-auth-kicker">ORDER READY</span><h2>转账开通</h2>
+            <p className="mf-payment-order">订单号：{manualOrder.data.id}</p>
+            <p className="mf-payment-price">¥{(manualOrder.data.amount / 100).toFixed(2)}</p>
+            {manualOrder.qrUrl ? (
+              <img src={manualOrder.qrUrl} alt="收款码" className="mf-payment-qr" />
+            ) : (
+              <p className="mf-payment-warning">收款码尚未配置，请联系管理员获取收款方式。</p>
+            )}
+            <p className="mf-payment-hint">付款后请保留订单号。管理员核对到账后，会手动为账号开通生成额度。</p>
+            <button onClick={() => setManualOrder(null)} className="mf-plan-action">知道了</button>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

@@ -1,0 +1,1 @@
+ALTER TABLE "Diagnose" ADD COLUMN IF NOT EXISTS "reportData" JSONB;

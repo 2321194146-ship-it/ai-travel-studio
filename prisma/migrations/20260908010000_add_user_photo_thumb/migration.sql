@@ -1,0 +1,1 @@
+ALTER TABLE "UserPhoto" ADD COLUMN "thumbUrl" TEXT;

@@ -16,6 +16,11 @@
 # next.js
 /.next/
 /out/
+/public/uploads/
+/public/outputs/
+/.data/
+/.playwright-cli/
+/output/playwright/
 
 # production
 /build

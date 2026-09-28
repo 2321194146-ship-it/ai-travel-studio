@@ -36,14 +36,75 @@ model Session {
 model User {
   id            String         @id @default(cuid())
   name          String?
+  phone         String?        @unique
+  passwordHash  String?        @db.Text
   email         String?        @unique
   emailVerified DateTime?
   image         String?
+  createdAt     DateTime       @default(now()) // 注册时间；历史近似回填用户由 createdAtEstimated 标记
+  createdAtEstimated Boolean   @default(false) // 2026-09-25 前按活动记录回填的历史用户为 true
   credits       Int            @default(0)
+  membership    String         @default("NONE") // NONE / MONTHLY / YEARLY
+  membershipExpiresAt DateTime?
+  role          String         @default("USER") // USER / ADMIN
   customApiKey  String?        @db.Text
   accounts      Account[]
   sessions      Session[]
-  travelStudios TravelStudio[]
+  generations   Generation[]
+  diagnoses     Diagnose[]
+  orders        ManualOrder[]
+  redeemedCodes RedeemCode[]   @relation("CodeRedeemer")
+  creditLedger  CreditLedger[]
+  auditLogs     AdminAuditLog[] @relation("AuditActor")
+  circlePosts   CirclePost[]
+  circleComments CircleComment[]
+  circleLikes   CircleLike[]
+  photos        UserPhoto[]
+  inviteCode    String?        @unique
+  referredBy    User?          @relation("InviteReferrer", fields: [referredById], references: [id])
+  referredById  String?
+  referrals     User[]         @relation("InviteReferrer")
+  battlesInitiated Battle[]     @relation("BattleInitiator")
+  battlesWon    Battle[]       @relation("BattleWinner")
+  battlesLost   Battle[]       @relation("BattleLoser")
+  subsite       Subsite?       @relation("SubsiteOwner")
+}
+
+// 比帅大战：一次对决一条记录，双方都关联用户（应战方注册后回填）
+model Battle {
+  id            String   @id @default(cuid())
+  initiatorId   String
+  initiator     User     @relation("BattleInitiator", fields: [initiatorId], references: [id])
+  winnerId      String?
+  winner        User?    @relation("BattleWinner", fields: [winnerId], references: [id])
+  loserId       String?
+  loser         User?    @relation("BattleLoser", fields: [loserId], references: [id])
+  initiatorScore Int
+  challengerScore Int?
+  initiatorScores Json?   // [颜值, 氛围, 上镜]
+  challengerScores Json?
+  initiatorPhotoUrl  String?
+  challengerPhotoUrl String?
+  status        String   @default("PENDING") // PENDING / FINISHED
+  gapThreshold  Boolean  @default(false) // 分差>=20 触发降维打击文案
+  tauntLine     String?  // 输家随机槽点
+  createdAt     DateTime @default(now())
+  finishedAt    DateTime?
+  @@index([initiatorId])
+  @@index([winnerId])
+}
+
+
+model UserPhoto {
+  id        String   @id @default(cuid())
+  userId    String
+  url       String
+  thumbUrl  String?
+  label     String   @default("未分类")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model VerificationToken {
@@ -54,17 +115,243 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model TravelStudio {
+// AI展示面生成记录
+model Generation {
+  id            String   @id @default(cuid())
+  userId        String
+  requestId     String?  @unique // 兼容旧 MuAPI 任务ID（webhook 回调匹配）；新架构同步完成，可为空
+  inputImages   Json     // 上传的用户照片数组
+  outputImages  Json     // 生成的结果图片数组
+  templateId    String?
+  templateName  String?
+  category      String?  // 场景分类：咖啡厅/健身房/旅行/商务/日常/街拍
+  prompt        String
+  modelName     String   // 档位：standard / high / flagship（或兼容的旧模型名）
+  status        String   @default("processing") // processing / completed / failed
+  creditCost    Int      @default(1)
+  provider      String?  // 实际使用的供应商：qwen / ark
+  actualModel   String?  // 实际使用的模型名 / 方舟接入点 ID
+  failureReason String?  @db.Text // 失败原因（不含任何 API Key）
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+// AI形象诊断记录
+model Diagnose {
   id          String   @id @default(cuid())
   userId      String
-  inputImage  String
-  resultImage String   @default("")
-  prompt      String
-  destination String
-  modelName   String
-  requestId   String   @unique
-  status      String   @default("processing")
-  creditCost  Int      @default(12)
+  inputImage  String   // 上传的用户照片
+  faceShape   String?  // 脸型：圆形/方形/椭圆形/心形/长形/菱形
+  skinTone    String?  // 肤色
+  hairstyles  Json     // 推荐发型数组
+  outfits     Json     // 推荐穿搭数组
+  styles      Json     // 推荐风格数组
+  score       Int?     // 形象评分 0-100
+  suggestion  String?  // 综合建议
+  reportData  Json?    // 完整复核报告；历史记录为空时不补造分析
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// 场景模板
+model Template {
+  id          String   @id @default(cuid())
+  name        String   // 模板名称
+  category    String   // 分类：咖啡厅/健身房/旅行/商务/日常/街拍
+  coverImage  String   // 封面图
+  baseImage   String?  // 底图
+  prompt      String   // 生成提示词
+  description String?  // 描述
+  sort        Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+// 人工收款订单：赞赏码、微店和人工补单统一进入这张表。
+model ManualOrder {
+  id          String    @id @default(cuid())
+  userId      String?
+  channel     String    // APPRECIATION / WEIDIAN / MANUAL
+  planId      String
+  planName    String
+  amount          Int       @default(0) // 分
+  status          String    @default("PENDING") // PENDING / PAID / CANCELLED / REFUNDED
+  orderType       String    @default("MEMBERSHIP") // MEMBERSHIP / SERVICE / SITE_ORDER / AGENT_RECHARGE
+  deliveryStatus  String    @default("NOT_REQUIRED") // NOT_REQUIRED / NOT_STARTED / WAITING_CUSTOMER / IN_PROGRESS / DELIVERED / CANCELLED
+  accountHint     String?
+  proofUrl        String?
+  note            String?   @db.Text
+  paymentTradeNo String?
+  paidAt          DateTime?
+  deliveredAt     DateTime?
+  nextFollowUpAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  subsiteId   String?
+  subsite     Subsite?  @relation(fields: [subsiteId], references: [id], onDelete: SetNull)
+  siteCreditsCost Int    @default(0) // 分站订单冻结的供货积分数
+  collectionMode String? // PLATFORM / AGENT；分站订单下单时冻结
+  collectionPid String? // 下单时实际收款商户 PID 快照
+  siteCreditsReservedAt DateTime?
+  siteCreditsReleasedAt DateTime?
+  settlementStatus String @default("NOT_REQUIRED") // NOT_REQUIRED / PENDING / SETTLED
+  settlementAmount Int? // 平台代收时管理员确认的应结代理金额（分）
+  settlementNote String? @db.Text
+  settledAt DateTime?
+  settledById String?
+  platformFeeBps Int? // 分站订单平台费率快照；当前 3000 = 30%
+  platformFeeAmount Int? // 按客户实际支付金额计算的平台份额（分）
+  agentShareAmount Int? // 按客户实际支付金额计算的代理份额（分）
+  platformFeeCredits Int? // 以 1 积分=100 分计算的平台份额扣分
+  siteLedgerStatus String @default("NOT_REQUIRED") // NOT_REQUIRED / RESERVED / CHARGED / RELEASED / PLATFORM_DUE / REVERSED
+
+  @@index([collectionMode, status])
+  @@index([settlementStatus, subsiteId])
+  @@index([siteLedgerStatus])
+  @@index([status])
+  @@index([orderType])
+  @@index([deliveryStatus])
+  @@index([channel])
+  @@index([userId])
+  @@index([subsiteId])
+}
+
+// 卡密只保存哈希值，原文只在生成时展示一次。
+model RedeemCode {
+  id             String    @id @default(cuid())
+  codeHash       String    @unique
+  codeLast4      String
+  planId         String
+  planName       String
+  membershipDays Int       @default(0)
+  credits        Int       @default(0)
+  status         String    @default("ACTIVE") // ACTIVE / REDEEMED / REVOKED / EXPIRED
+  expiresAt      DateTime?
+  redeemedAt     DateTime?
+  redeemedById   String?
+  createdAt      DateTime  @default(now())
+  redeemedBy     User?     @relation("CodeRedeemer", fields: [redeemedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([planId])
+}
+
+// 所有积分变动都留流水，避免只改 User.credits 无法追账。
+model CreditLedger {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int
+  balance     Int
+  reason      String
+  sourceType  String   // REDEEM / MANUAL / GENERATION / REFUND / PAYMENT
+  sourceId    String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// 管理员操作日志：人工开通、发卡、撤销和调整都有记录。
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  targetType String
+  targetId  String?
+  detail    Json?
+  createdAt DateTime @default(now())
+  actor     User     @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+}
+
+// 圈子内容：用户投稿先进入待审核，管理员通过后才公开。
+model CirclePost {
+  id        String   @id @default(cuid())
+  userId    String?
+  content   String   @db.Text
+  imageUrl  String?
+  imageUrls Json?
+  status    String   @default("PENDING") // PENDING / PUBLISHED / REJECTED
+  isSeed    Boolean  @default(false)
+  likes     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  comments  CircleComment[]
+  likesBy   CircleLike[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model CircleComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String?
+  content   String   @db.Text
+  status    String   @default("PENDING") // PENDING / PUBLISHED / REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  post      CirclePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([postId, status, createdAt])
+}
+
+model CircleLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  post      CirclePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId, createdAt])
+}
+
+// 分站：一个代理一条。收款二选一：填代理自己的易支付商户 = 客户钱直达代理、每单扣代理积分（1元=1积分）；
+// 留空 = 平台代收，货款进平台主收款、不扣代理积分，与代理人工结算
+model Subsite {
+  id         String   @id @default(cuid())
+  ownerId    String   @unique
+  owner      User     @relation("SubsiteOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  slug       String   @unique // 子域前缀：slug.face.shuqizhisou.cc
+  siteName   String
+  status     String   @default("ACTIVE") // ACTIVE / SUSPENDED
+  epayPid    String? // 代理自己的易支付商户；为空 = 平台代收
+  epayKey    String?
+  epayApiUrl String?
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  orders     ManualOrder[]
+  settlementRequests SiteSettlementRequest[]
+}
+
+// 平台代收分站的人工打款申请：代理提交收款码，管理员线下扫码打款后标记完成。
+// 不做自动打款；金额 = 提交时待结算订单的代理份额（实付 70%）合计，快照在 orderIds。
+model SiteSettlementRequest {
+  id           String   @id @default(cuid())
+  subsiteId    String
+  subsite      Subsite  @relation(fields: [subsiteId], references: [id], onDelete: Cascade)
+  amount       Int // 申请打款金额（分）
+  orderCount   Int      @default(0)
+  orderIds     Json     // 覆盖的分站订单 ID 数组
+  collectQrUrl String   // 收款码图片（永久目录 /uploads/settlement/）
+  status       String   @default("PENDING") // PENDING / PAID / REJECTED
+  note         String?
+  paidAt       DateTime?
+  paidById     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([subsiteId, status])
 }

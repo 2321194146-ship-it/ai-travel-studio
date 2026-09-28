@@ -1,0 +1,16 @@
+{
+  "boxing": {
+    "file": "invite-boxing.png",
+    "qr": { "x": 385, "y": 1264, "w": 253, "h": 224 },
+    "qrCenter": { "x": 511, "y": 1376 },
+    "codeText": { "x": 320, "y": 1486, "w": 390, "h": 46, "centerX": 515, "fontSize": 44, "font": "PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif", "fill": "url(#gold)", "stroke": "#3d2a0c" },
+    "codeTextSample": { "goldTest": [170, 120, 150] }
+  },
+  "invitation": {
+    "file": "invite-invitation.png",
+    "qr": { "x": 404, "y": 1171, "w": 214, "h": 205 },
+    "qrCenter": { "x": 511, "y": 1273 },
+    "codeText": { "x": 355, "y": 1378, "w": 320, "h": 44, "centerX": 515, "fontSize": 40, "font": "Songti SC, STSong, STZhongsong, serif", "fill": "#6d4f1f", "stroke": null },
+    "codeTextSample": { "darkTest": [150, 120, 100] }
+  }
+}

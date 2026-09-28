@@ -1,0 +1,13 @@
+{
+  "name": "型男制造机",
+  "short_name": "型男制造机",
+  "description": "AI男性形象改造工具",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }
+  ]
+}

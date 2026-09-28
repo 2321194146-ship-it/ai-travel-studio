@@ -15,7 +15,8 @@ export async function POST(req) {
     const result = await BillingService.handleWebhook(body, signature);
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Stripe webhook processing error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // 不回传内部错误细节，避免泄露实现信息
+    console.error("Stripe webhook processing error:", error?.message || error);
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }

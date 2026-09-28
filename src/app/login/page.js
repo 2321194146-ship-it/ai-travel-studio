@@ -3,7 +3,8 @@
 import { signIn, useSession } from "next-auth/react";
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FaGoogle, FaKey, FaInfoCircle, FaArrowRight } from "react-icons/fa";
+import Link from "next/link";
+import { FaInfoCircle, FaMobileAlt } from "react-icons/fa";
 import toast, { Toaster } from "react-hot-toast";
 
 function LoginContent() {
@@ -12,9 +13,51 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const next = searchParams.get("callbackUrl") || searchParams.get("next") || "/";
 
-  const [activeTab, setActiveTab] = useState("google"); // "google" | "apikey"
-  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [inviteInput, setInviteInput] = useState("");
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const ref = window.localStorage.getItem("mf_ref");
+        if (ref) setInviteInput(ref);
+      } catch {}
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePhoneLogin = async (e) => {
+    e.preventDefault();
+    if (!/^1[3-9]\d{9}$/.test(phoneInput)) return toast.error("请输入正确的手机号");
+    if (passwordInput.length < 8) return toast.error("密码至少需要8位");
+    setIsSubmitting(true);
+    try {
+      if (isRegistering) {
+        const registerRes = await fetch("/api/auth/phone/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ phone: phoneInput, password: passwordInput, inviteCode: inviteInput.trim() || undefined }),
+        });
+        const registerData = await registerRes.json();
+        if (!registerRes.ok) throw new Error(registerData.error || "注册失败");
+      }
+      const res = await signIn("phone-password", { phone: phoneInput, password: passwordInput, redirect: false, callbackUrl: next });
+      if (res?.error) throw new Error(isRegistering ? "注册成功但登录失败，请重试" : "手机号或密码错误");
+      try {
+        const returnPath = new URL(next, window.location.origin).pathname;
+        if (returnPath === "/") window.sessionStorage.setItem("mf_show_purchase_prompt", "1");
+      } catch {}
+      toast.success(isRegistering ? "注册并登录成功" : "登录成功");
+      router.push(next);
+    } catch (error) {
+      toast.error(error.message || "操作失败");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -22,146 +65,29 @@ function LoginContent() {
     }
   }, [status, router, next]);
 
-  const handleApiKeyLogin = async (e) => {
-    e.preventDefault();
-    const key = apiKeyInput.trim();
-    if (!key) {
-      toast.error("Please enter a valid MuAPI key");
-      return;
-    }
-    if (key.length < 5) {
-      toast.error("API Key appears too short");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const res = await signIn("credentials", {
-        apiKey: key,
-        redirect: false,
-        callbackUrl: next,
-      });
-
-      if (res?.error) {
-        toast.error(res.error || "Failed to sign in with API key");
-      } else {
-        toast.success("Signed in with API Key successfully!");
-        router.push(next);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("An error occurred during API key authentication");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-bg-page px-6 text-primary-text select-none">
-      <Toaster position="top-right" />
-      <div className="relative bg-bg-card border border-divider w-full max-w-md rounded-xl p-8 space-y-6 shadow-2xl animate-scale-up">
-        <div className="flex flex-col items-center text-center space-y-3">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-2xl text-primary font-black shadow-md shadow-primary/15">
-            ✈️
-          </div>
-          <h2 className="text-2xl font-black uppercase tracking-tight">Sign In to Travel Studio</h2>
-          <p className="text-xs font-semibold text-secondary-text leading-relaxed px-2">
-            Choose your preferred sign-in method: Google Account or custom MuAPI Key.
-          </p>
-        </div>
+    <div className="mf-auth-shell">
+      <Toaster position="top-right" toastOptions={{ style: { background: "#211b15", color: "#f4ead7", border: "1px solid rgba(220,178,103,.28)" } }} />
+      <div className="mf-auth-glow mf-auth-glow-left" />
+      <div className="mf-auth-glow mf-auth-glow-right" />
+      <Link className="mf-auth-back" href="/">‹ <span>返回首页</span></Link>
+      <div className="mf-auth-card">
+        <div className="mf-auth-brand"><span>型</span><div><b>型男制造机</b><small>PERSONAL IMAGE STUDIO</small></div></div>
+        <div className="mf-auth-heading"><span className="mf-auth-kicker">YOUR STYLE, YOUR STORY</span><h1>{isRegistering ? "建立你的形象档案" : "进入你的形象档案"}</h1><p>保存照片、同步生成额度，开启专属形象改造方案</p></div>
 
-        {/* Auth Method Selector Tabs */}
-        <div className="flex bg-bg-page p-1 rounded-lg border border-divider/60">
-          <button
-            type="button"
-            onClick={() => setActiveTab("google")}
-            className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === "google"
-                ? "bg-bg-card text-white shadow-sm border border-divider/40"
-                : "text-secondary-text hover:text-white"
-            }`}
-          >
-            <FaGoogle className="text-red-400" />
-            <span>Google Account</span>
-          </button>
+        <form onSubmit={handlePhoneLogin} className="mf-auth-form">
+          <label>手机号<div className="mf-auth-field"><FaMobileAlt /><input type="tel" autoComplete="tel" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} placeholder="输入手机号" maxLength={11} /></div></label>
+          <label>登录密码<div className="mf-auth-field"><span className="mf-auth-lock">◈</span><input type="password" autoComplete={isRegistering ? "new-password" : "current-password"} value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="至少 8 位字符" /></div></label>
+          {isRegistering && (
+            <label>好友邀请码（选填）<div className="mf-auth-field"><input type="text" value={inviteInput} onChange={(e) => setInviteInput(e.target.value.toUpperCase())} placeholder="有邀请码就填，双方都得次数" maxLength={8} style={{ textTransform: "uppercase" }} /></div></label>
+          )}
+          <button type="submit" disabled={isSubmitting} className="mf-auth-submit">{isSubmitting ? "处理中…" : isRegistering ? "注册并登录" : "登录并继续"}<span>→</span></button>
+          <button type="button" onClick={() => setIsRegistering((value) => !value)} className="mf-auth-switch">{isRegistering ? "已有账号？直接登录" : "还没有账号？立即注册"}</button>
+        </form>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("apikey")}
-            className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              activeTab === "apikey"
-                ? "bg-bg-card text-white shadow-sm border border-divider/40"
-                : "text-secondary-text hover:text-white"
-            }`}
-          >
-            <FaKey className="text-amber-400" />
-            <span>Use API Key</span>
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === "google" ? (
-          <div className="space-y-4 pt-2">
-            <button
-              onClick={() => signIn("google", { callbackUrl: next })}
-              className="w-full py-3.5 bg-white text-neutral-900 rounded-full text-xs font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-all shadow-md active:scale-[0.98] cursor-pointer"
-            >
-              <FaGoogle className="text-sm text-red-500" />
-              <span>Continue with Google</span>
-            </button>
-            <p className="text-[11px] text-center text-secondary-text">
-              Uses system credit balance. Ideal for credit pack purchases.
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={handleApiKeyLogin} className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <label className="block text-[11px] uppercase font-bold text-secondary-text tracking-wider">
-                MuAPI Key
-              </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="Enter your mu_... key"
-                  className="w-full bg-bg-page border border-divider rounded-lg px-3.5 py-2.5 text-xs text-white placeholder-secondary-text/50 focus:outline-none focus:border-primary transition-colors"
-                />
-              </div>
-              <div className="flex justify-end">
-                <a
-                  href="https://muapi.ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-primary hover:underline font-semibold"
-                >
-                  Get API Key from MuAPI →
-                </a>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting || !apiKeyInput.trim()}
-              className="w-full py-3 bg-primary hover:bg-primary/90 text-white rounded-full text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <span>{isSubmitting ? "Authenticating..." : "Sign In with API Key"}</span>
-              <FaArrowRight className="text-xs" />
-            </button>
-
-            <p className="text-[11px] text-center text-amber-400/90 font-medium">
-              ⚡ Generates AI travel photos using your API key. 0 website credits required!
-            </p>
-          </form>
-        )}
-
-        <div className="flex items-start gap-2.5 bg-primary/5 border border-primary/10 p-3.5 rounded text-[11px] leading-relaxed text-secondary-text">
-          <FaInfoCircle className="text-primary text-xs shrink-0 mt-0.5" />
-          <span>
-            By signing in, you agree to our Terms of Service. API keys are kept secure and encrypted for generation calls.
-          </span>
-        </div>
+        <div className="mf-auth-note"><FaInfoCircle /><span>登录即表示同意服务条款。你的照片仅用于生成你的专属形象方案，不会对外展示，你也可以随时在应用内删除。</span></div>
       </div>
+      <p className="mf-auth-footer">从看见自己开始，建立更好的形象表达</p>
     </div>
   );
 }
@@ -170,7 +96,7 @@ export default function Login() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-dvh flex items-center justify-center bg-bg-page text-primary-text">
+        <div className="mf-auth-shell mf-auth-loading">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       }

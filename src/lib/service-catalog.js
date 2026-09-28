@@ -1,0 +1,221 @@
+export const SERVICE_PLAN_CATALOG = Object.freeze({
+  materials_course: {
+    id: "materials_course",
+    name: "男生情感与社交资料课",
+    amount: 3990,
+    credits: 0,
+    membershipDays: 0,
+    modelTier: null,
+    orderType: "SERVICE",
+    serviceOnly: true,
+    serviceId: "materials",
+  },
+  training_7d: {
+    id: "training_7d",
+    name: "7 天社交展示面启动营",
+    amount: 29900,
+    credits: 0,
+    membershipDays: 0,
+    modelTier: null,
+    orderType: "SERVICE",
+    serviceOnly: true,
+    serviceId: "training",
+  },
+  consultation_1to1: {
+    id: "consultation_1to1",
+    name: "一对一形象与展示面咨询",
+    amount: 19900,
+    credits: 0,
+    membershipDays: 0,
+    modelTier: null,
+    orderType: "SERVICE",
+    serviceOnly: true,
+    serviceId: "consulting",
+  },
+  showcase_basic: {
+    id: "showcase_basic",
+    name: "个人展示面基础整理",
+    amount: 99900,
+    credits: 0,
+    membershipDays: 0,
+    modelTier: null,
+    orderType: "SERVICE",
+    serviceOnly: true,
+    serviceId: "showcase",
+    tier: "基础整理",
+  },
+  showcase_multi: {
+    id: "showcase_multi",
+    name: "个人展示面多平台打造",
+    amount: 199900,
+    credits: 0,
+    membershipDays: 0,
+    modelTier: null,
+    orderType: "SERVICE",
+    serviceOnly: true,
+    serviceId: "showcase",
+    tier: "多平台打造",
+  },
+  showcase_full: {
+    id: "showcase_full",
+    name: "个人展示面全案陪跑",
+    amount: 399900,
+    credits: 0,
+    membershipDays: 0,
+    modelTier: null,
+    orderType: "SERVICE",
+    serviceOnly: true,
+    serviceId: "showcase",
+    tier: "全案陪跑",
+  },
+});
+
+export const SERVICE_CATALOG = Object.freeze([
+  {
+    id: "materials",
+    eyebrow: "自己学",
+    title: "男生情感与社交资料课",
+    short: "搭讪、聊天、约会和个人展示的系统资源包。",
+    mode: "资料包",
+    priceLabel: "¥39.90",
+    productIds: ["materials_course"],
+    audience: [
+      "不知道如何自然认识异性，聊天容易冷场",
+      "朋友圈和社交资料比较空，不知道怎么整理",
+      "想系统学习真实、尊重、有边界的社交沟通",
+    ],
+    deliverables: [
+      "社交心态与边界资料",
+      "线下认识、线上聊天和约会准备模块",
+      "头像、朋友圈和个人资料自查表",
+      "开场话题、日常聊天和约会准备清单",
+      "图文资料包与版本更新说明",
+    ],
+    content: [
+      "社交心态、主动表达与拒绝边界",
+      "不同场景的自然开场和联系方式交换",
+      "线上聊天的开场、接话、延伸和见面节奏",
+      "第一次见面的准备、表达和后续跟进",
+      "头像、朋友圈和社交平台资料整理",
+    ],
+    duration: "资料包：购买后通过微信交付",
+    boundary: "不提供骚扰、跟踪、欺骗、偷拍、操控他人或违法内容；不承诺脱单、匹配或关系结果。",
+    ctaLabel: "购买资料课",
+    sheetIntro: "适合想先自己学习、自己整理社交资料的人。购买后按订单号添加微信领取资料。",
+    sheetItems: ["社交沟通与边界", "聊天、约会和场景清单", "朋友圈与个人资料整理", "图文资料包，微信交付"],
+  },
+  {
+    id: "training",
+    eyebrow: "跟着做",
+    title: "7 天社交展示面启动营",
+    short: "每天一个任务、每天一次反馈，完成一套基础社交展示面。",
+    mode: "7 天陪跑",
+    priceLabel: "¥299 / 期",
+    productIds: ["training_7d"],
+    audience: [
+      "有照片但不会筛选和使用",
+      "想整理头像、朋友圈和社交平台资料",
+      "需要外部任务和反馈，避免买完资料不行动",
+    ],
+    deliverables: [
+      "7 天任务表与每日打卡要求",
+      "照片、发型、穿搭和展示面整理反馈",
+      "主头像、备用头像和生活展示面筛选建议",
+      "朋友圈内容方向与个人简介建议",
+      "结营后的展示面基础清单",
+    ],
+    content: [
+      "Day 1：建立正面照、半身照、全身照和生活素材档案",
+      "Day 2：确定发型方向并整理理发沟通参考",
+      "Day 3：确定穿搭方向和全身照拍摄要求",
+      "Day 4：完成第一组生活展示面素材",
+      "Day 5：整理头像、个人简介和资料顺序",
+      "Day 6：规划朋友圈和第一条真实内容",
+      "Day 7：完成一套可使用的个人展示面基础资料",
+    ],
+    duration: "7 天；按当期安排通过微信完成任务和集中反馈",
+    boundary: "每天安排一个任务并在约定时间反馈，不承诺全天候在线、涨粉、匹配或关系结果。",
+    ctaLabel: "购买并登记本期",
+    sheetIntro: "适合想按步骤完成展示面、需要每天有人提醒和反馈的人。",
+    sheetItems: ["7 天任务与打卡", "每天一个真实执行目标", "按当期安排集中反馈", "结营整理一套基础展示面"],
+  },
+  {
+    id: "consulting",
+    eyebrow: "专门问",
+    title: "一对一形象与展示面咨询",
+    short: "针对照片、发型、穿搭和社交资料，给出具体调整建议。",
+    mode: "个人咨询",
+    priceLabel: "¥199 / 次",
+    productIds: ["consultation_1to1"],
+    audience: [
+      "已经有明确问题，想先得到针对性判断",
+      "不知道头像、发型、穿搭或朋友圈该从哪里改",
+      "希望有人帮自己确定下一步执行顺序",
+    ],
+    deliverables: [
+      "一次约 45—60 分钟的微信文字或语音咨询",
+      "围绕一个主要问题进行照片和资料分析",
+      "发型、穿搭、头像或展示面调整建议",
+      "一份简短的后续执行清单",
+    ],
+    content: [
+      "照片和个人展示资料问题梳理",
+      "发型、穿搭与拍照方向建议",
+      "头像、朋友圈和平台资料的优先级调整",
+      "基于用户提交素材的可执行建议",
+    ],
+    duration: "一次服务；付款后微信确认沟通时间和方式",
+    boundary: "咨询是基于所提交资料的个人建议，不构成医学、心理或关系结果判断；不承诺变帅、脱单、涨粉或成交。",
+    ctaLabel: "购买咨询服务",
+    sheetIntro: "适合有具体问题、希望先获得个人判断和执行顺序的人。",
+    sheetItems: ["一次 45—60 分钟沟通", "围绕一个主要问题分析", "给出发型、穿搭或资料建议", "微信确认时间和方式"],
+  },
+  {
+    id: "showcase",
+    eyebrow: "交给我们做",
+    title: "个人展示面全案陪跑",
+    short: "你提供真实照片和资料，我们按约定的平台、周期和数量完成整理与打造。",
+    mode: "高客单服务",
+    priceLabel: "¥999 起",
+    productIds: ["showcase_basic", "showcase_multi", "showcase_full"],
+    audience: [
+      "手机里有很多照片，但没有时间自己整理",
+      "朋友圈、抖音等平台资料风格不统一",
+      "希望有人直接帮自己完成第一套展示面",
+    ],
+    deliverables: [
+      "真实照片和个人资料整理",
+      "头像、简介、照片顺序和展示面方案",
+      "朋友圈与短视频平台内容方向",
+      "约定数量的 AI 展示面素材",
+      "按套餐提供沟通、修改和阶段确认",
+    ],
+    content: [
+      "基础整理：1 个主平台、1 组素材、6 条内容方向、1 轮修改",
+      "多平台打造：2 个平台、朋友圈与短视频资料、12 条内容方向、2 轮修改",
+      "全案陪跑：最多 3 个平台、30 条内容方向、多组素材和阶段复盘",
+      "所有公开发布内容由用户最终确认，不未经授权代发或代聊",
+    ],
+    duration: "按套餐执行：7—30 天；具体周期以付款后确认的服务单为准",
+    boundary: "不包含代替用户聊天、虚构身份经历、未经确认发布内容或无限次修改；AI 场景图不应被包装成未发生的真实经历。",
+    ctaLabel: "选择陪跑套餐",
+    sheetIntro: "适合不想自己折腾、希望把资料整理和多平台展示面交给我们按清单完成的人。",
+    sheetItems: ["按平台和数量明确交付", "真实素材整理与展示面规划", "包含沟通次数和修改轮数", "付款后微信确认资料与开始时间"],
+  },
+]);
+
+export function getServicePlan(planId) {
+  return SERVICE_PLAN_CATALOG[String(planId || "")] || null;
+}
+
+export function isServicePlan(plan) {
+  return Boolean(plan?.serviceOnly || plan?.orderType === "SERVICE");
+}
+
+export function getServiceById(serviceId) {
+  return SERVICE_CATALOG.find((service) => service.id === serviceId) || null;
+}
+
+export function formatCents(cents) {
+  return `¥${((Number(cents) || 0) / 100).toFixed(2)}`;
+}

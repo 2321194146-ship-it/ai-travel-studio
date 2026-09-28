@@ -2,6 +2,8 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
+import { normalizePhone, verifyPassword } from "./password";
+import { checkRateLimit } from "./rateLimit";
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
@@ -14,56 +16,33 @@ export const authOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
     CredentialsProvider({
-      id: "credentials",
-      name: "API Key",
+      id: "phone-password",
+      name: "手机号密码",
       credentials: {
-        apiKey: { label: "MuAPI Key", type: "password" },
+        phone: { label: "手机号", type: "text" },
+        password: { label: "密码", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.apiKey) {
-          throw new Error("API Key is required");
+        const phone = normalizePhone(credentials?.phone);
+        if (!phone || typeof credentials?.password !== "string") return null;
+        const attempt = checkRateLimit(`phone-login:${phone}`, 8, 15 * 60_000);
+        if (!attempt.allowed) throw new Error("登录尝试过于频繁，请稍后再试");
+        const dbUser = await prisma.user.findUnique({ where: { phone } });
+        if (!dbUser?.passwordHash || !verifyPassword(credentials.password, dbUser.passwordHash)) return null;
+        if (process.env.ADMIN_PHONE === phone && dbUser.role !== "ADMIN") {
+          await prisma.user.update({ where: { id: dbUser.id }, data: { role: "ADMIN" } });
+          dbUser.role = "ADMIN";
         }
-        const apiKey = credentials.apiKey.trim();
-        if (apiKey.length < 5) {
-          throw new Error("Invalid API key format");
-        }
-
-        const dummyEmail = `apikey_${apiKey.slice(-8)}@muapi.local`;
-        let dbUser = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { customApiKey: apiKey },
-              { email: dummyEmail }
-            ]
-          }
-        });
-
-        if (!dbUser) {
-          dbUser = await prisma.user.create({
-            data: {
-              name: "API Key User",
-              email: dummyEmail,
-              customApiKey: apiKey,
-              credits: 0,
-            }
-          });
-        } else if (!dbUser.customApiKey) {
-          dbUser = await prisma.user.update({
-            where: { id: dbUser.id },
-            data: { customApiKey: apiKey }
-          });
-        }
-
         return {
           id: dbUser.id,
           name: dbUser.name,
           email: dbUser.email,
           image: dbUser.image || null,
           credits: dbUser.credits,
-          customApiKey: dbUser.customApiKey || apiKey,
-          isApiKeyUser: true,
+          role: dbUser.role,
+          phone: dbUser.phone,
         };
-      }
+      },
     }),
   ],
   callbacks: {
@@ -71,11 +50,12 @@ export const authOptions = {
       if (user) {
         token.id = user.id;
         token.credits = user.credits;
-        token.customApiKey = user.customApiKey;
-        token.isApiKeyUser = user.isApiKeyUser || false;
+        token.role = user.role || "USER";
+        token.phone = user.phone || null;
+        token.membership = user.membership || "NONE";
+        token.membershipExpiresAt = user.membershipExpiresAt || null;
       }
       if (trigger === "update" && session) {
-        if (session.customApiKey !== undefined) token.customApiKey = session.customApiKey;
         if (session.credits !== undefined) token.credits = session.credits;
       }
       const userId = token.id || token.sub;
@@ -84,22 +64,34 @@ export const authOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: userId },
-            select: { credits: true, customApiKey: true }
+            select: { credits: true, role: true, phone: true, membership: true, membershipExpiresAt: true },
           });
           if (dbUser) {
             token.credits = dbUser.credits;
-            token.customApiKey = dbUser.customApiKey;
+            token.role = dbUser.role;
+            token.phone = dbUser.phone;
+            token.membership = dbUser.membership;
+            token.membershipExpiresAt = dbUser.membershipExpiresAt;
+          } else {
+            // 账号已被删除：标记失效，session 回调会让登录态作废，避免僵尸会话拿着不存在的用户 ID 写库
+            token.accountMissing = true;
           }
         } catch (err) {}
       }
       return token;
     },
     async session({ session, token }) {
+      if (token?.accountMissing) {
+        // 官方推荐的强制登出模式：抛错后客户端会话回到未登录态
+        throw new Error("账号已失效，请重新登录");
+      }
       if (session.user && token) {
         session.user.id = token.id || token.sub;
         session.user.credits = token.credits;
-        session.user.customApiKey = token.customApiKey;
-        session.user.isApiKeyUser = Boolean(token.customApiKey);
+        session.user.role = token.role || "USER";
+        session.user.phone = token.phone || null;
+        session.user.membership = token.membership || "NONE";
+        session.user.membershipExpiresAt = token.membershipExpiresAt || null;
       }
       return session;
     },

@@ -9,7 +9,7 @@ import {
   FaTrashAlt,
   FaTimes,
   FaExpand,
-  FaGlobe,
+  FaCamera,
 } from "react-icons/fa";
 
 export default function GalleryPage() {
@@ -25,7 +25,7 @@ export default function GalleryPage() {
       if (res.ok) {
         const data = await res.json();
         setCreations(
-          Array.isArray(data) ? data.filter((c) => c.resultImage) : []
+          Array.isArray(data) ? data.filter((c) => c.outputImages?.[0]) : []
         );
       }
     } catch {}
@@ -47,17 +47,18 @@ export default function GalleryPage() {
   }, [session?.user]);
 
   const handleDownload = (imageUrl, id) => {
-    const url = `/api/download?url=${encodeURIComponent(imageUrl)}`;
+    if (!id) return;
+    const url = `/api/download?id=${id}`;
     const a = document.createElement("a");
     a.href = url;
-    a.download = `travel-${id}.png`;
+    a.download = `型男制造机-${id}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Delete this travel creation?")) return;
+    if (!confirm("确定要删除这张作品吗？")) return;
     await fetch(`/api/creations?id=${id}`, { method: "DELETE" });
     setCreations((prev) => prev.filter((c) => c.id !== id));
     if (selected?.id === id) setSelected(null);
@@ -71,10 +72,10 @@ export default function GalleryPage() {
             <FaImages className="text-2xl text-zinc-600" />
           </div>
           <h2 className="text-base font-bold text-zinc-200">
-            Sign in to view Gallery
+            登录后查看我的作品
           </h2>
           <p className="text-xs text-zinc-500 mt-2">
-            Your photorealistic scenic travel photos will appear here once generated.
+            你生成的高质感展示面都会保存在这里，随时下载。
           </p>
         </div>
       </div>
@@ -86,99 +87,99 @@ export default function GalleryPage() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">
-            My Travel Gallery
+            我的作品
           </h1>
           <p className="text-xs text-zinc-500 mt-1">
-            All your generated scenic background swaps — ready to download or delete.
+            所有生成的展示面照片，支持下载和删除。
           </p>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <FaSpinner className="animate-spin text-2xl text-teal-400" />
+            <FaSpinner className="animate-spin text-2xl text-amber-400" />
           </div>
         ) : creations.length === 0 ? (
           <div className="text-center py-20">
             <div className="h-20 w-20 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-5">
-              <FaGlobe className="text-3xl text-zinc-700 animate-pulse" />
+              <FaCamera className="text-3xl text-zinc-700 animate-pulse" />
             </div>
-            <h3 className="text-sm font-bold text-zinc-300">No travel photos yet</h3>
+            <h3 className="text-sm font-bold text-zinc-300">还没有作品</h3>
             <p className="text-xs text-zinc-600 mt-2">
-              Head to the Studio and pick an iconic landmark to render your first travel portrait.
+              去首页选择一个场景，生成你的第一张展示面吧！
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {creations.map((c) => (
-              <div
-                key={c.id}
-                className="group bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-teal-500/40 transition-all hover:shadow-xl hover:shadow-teal-500/5"
-              >
+            {creations.map((c) => {
+              const resultImg = c.outputImages?.[0];
+              const inputImg = c.inputImages?.[0];
+              return (
                 <div
-                  className="relative aspect-square bg-zinc-800 cursor-pointer overflow-hidden"
-                  onClick={() => {
-                    setSelected(c);
-                    setCompareMode("result");
-                  }}
+                  key={c.id}
+                  className="group bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-amber-500/40 transition-all hover:shadow-xl hover:shadow-amber-500/5"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={c.resultImage}
-                    alt="Travel Snapshot"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                    <FaExpand className="text-white text-xl drop-shadow-lg" />
-                  </div>
-                  {/* Original thumbnail overlay */}
-                  {c.inputImage && (
-                    <div className="absolute bottom-2 left-2 h-10 w-10 rounded border border-zinc-600 overflow-hidden shadow-lg bg-zinc-800">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={c.inputImage}
-                        alt="Original Selfie"
-                        className="w-full h-full object-cover opacity-70"
-                      />
+                  <div
+                    className="relative aspect-square bg-zinc-800 cursor-pointer overflow-hidden"
+                    onClick={() => {
+                      setSelected(c);
+                      setCompareMode("result");
+                    }}
+                  >
+                    <img
+                      src={resultImg}
+                      alt="展示面"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <FaExpand className="text-white text-xl drop-shadow-lg" />
                     </div>
-                  )}
-                  {/* Destination Tag */}
-                  {c.destination && (
-                    <span className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider text-teal-300 bg-teal-950/80 border border-teal-800 px-2 py-0.5 rounded shadow">
-                      {c.destination.split(" ")[0]}
+                    {inputImg && (
+                      <div className="absolute bottom-2 left-2 h-10 w-10 rounded border border-zinc-600 overflow-hidden shadow-lg bg-zinc-800">
+                        <img
+                          src={inputImg}
+                          alt="原图"
+                          className="w-full h-full object-cover opacity-70"
+                        />
+                      </div>
+                    )}
+                    {c.templateName && (
+                      <span className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider text-amber-300 bg-amber-950/80 border border-amber-800 px-2 py-0.5 rounded shadow">
+                        {c.templateName}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-3 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-zinc-500 font-medium truncate">
+                      {new Date(c.createdAt).toLocaleDateString("zh-CN", {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </span>
-                  )}
-                </div>
-                <div className="p-3 flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-zinc-500 font-medium truncate">
-                    {new Date(c.createdAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => handleDownload(c.resultImage, c.id)}
-                      className="p-1.5 rounded-lg bg-zinc-800 hover:bg-teal-500 hover:text-zinc-950 transition-all cursor-pointer"
-                      title="Download"
-                    >
-                      <FaDownload className="text-[10px]" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(c.id)}
-                      className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/50 hover:text-red-400 text-zinc-400 transition-all cursor-pointer"
-                      title="Delete"
-                    >
-                      <FaTrashAlt className="text-[10px]" />
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => handleDownload(resultImg, c.id)}
+                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 transition-all cursor-pointer"
+                        title="下载"
+                      >
+                        <FaDownload className="text-[10px]" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(c.id)}
+                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/50 hover:text-red-400 text-zinc-400 transition-all cursor-pointer"
+                        title="删除"
+                      >
+                        <FaTrashAlt className="text-[10px]" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Detail Modal */}
+      {/* 详情弹窗 */}
       {selected && (
         <div
           className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150"
@@ -188,10 +189,9 @@ export default function GalleryPage() {
             className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
               <div className="flex items-center gap-3">
-                <h3 className="text-sm font-bold text-zinc-100">Travel Snapshot Details</h3>
+                <h3 className="text-sm font-bold text-zinc-100">作品详情</h3>
                 <div className="flex bg-zinc-800 rounded-lg p-0.5 border border-zinc-700">
                   {["result", "original"].map((m) => (
                     <button
@@ -199,11 +199,11 @@ export default function GalleryPage() {
                       onClick={() => setCompareMode(m)}
                       className={`text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                         compareMode === m
-                          ? "bg-teal-500 text-zinc-950 font-black shadow"
+                          ? "bg-amber-500 text-zinc-950 font-black shadow"
                           : "text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
-                      {m === "result" ? "After" : "Before"}
+                      {m === "result" ? "生成后" : "原图"}
                     </button>
                   ))}
                 </div>
@@ -216,39 +216,38 @@ export default function GalleryPage() {
               </button>
             </div>
 
-            {/* Modal Image */}
             <div className="flex-1 overflow-auto flex items-center justify-center bg-bg-page p-4 min-h-[300px]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={
                   compareMode === "result"
-                    ? selected.resultImage
-                    : selected.inputImage
+                    ? selected.outputImages?.[0]
+                    : selected.inputImages?.[0]
                 }
-                alt={compareMode === "result" ? "Travel Result" : "Original Portrait"}
+                alt={compareMode === "result" ? "生成结果" : "原图"}
                 className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-xl"
               />
             </div>
 
-            {/* Modal Footer */}
             <div className="px-5 py-4 border-t border-zinc-800 flex items-center gap-3">
               <div className="flex flex-col flex-1 min-w-0">
-                <span className="text-[10px] text-teal-400 font-bold uppercase tracking-wider">{selected.destination}</span>
+                <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                  {selected.templateName}
+                </span>
                 <p className="text-[10px] text-zinc-500 truncate leading-snug mt-0.5">
                   {selected.prompt}
                 </p>
               </div>
               <button
-                onClick={() => handleDownload(selected.resultImage, selected.id)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-400 to-emerald-500 hover:from-teal-500 hover:to-emerald-600 text-zinc-950 rounded-xl text-xs font-black cursor-pointer shadow-lg shadow-teal-500/20 transition-all shrink-0 hover:scale-[1.01]"
+                onClick={() => handleDownload(selected.outputImages?.[0], selected.id)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-zinc-950 rounded-xl text-xs font-black cursor-pointer shadow-lg shadow-amber-500/20 transition-all shrink-0 hover:scale-[1.01]"
               >
                 <FaDownload />
-                Download HD
+                下载高清
               </button>
               <button
                 onClick={() => handleDelete(selected.id)}
                 className="px-3 py-2.5 bg-zinc-800 hover:bg-red-900/30 hover:text-red-400 border border-zinc-700 hover:border-red-500/30 text-zinc-400 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
-                title="Delete"
+                title="删除"
               >
                 <FaTrashAlt />
               </button>
