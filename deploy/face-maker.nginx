@@ -26,6 +26,18 @@ server {
     client_max_body_size 20M;
 
     # Route user media through Next.js so account and published-post access checks run.
+    # Payment QR assets live in the persistent app directory, outside versioned releases.
+    # Serve them from that stable directory so a release switch cannot drop the QR image.
+    location ^~ /payment/ {
+        alias /var/www/face-maker/public/payment/;
+        add_header Cache-Control "no-store" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
