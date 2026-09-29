@@ -53,8 +53,8 @@ const config = {
           process.env.ARK_BASE_URL ||
           "https://ark.cn-beijing.volces.com/api/v3"
         ).replace(/\/+$/, ""),
-        // 注意：方舟模型必须填控制台创建的「推理接入点 Endpoint ID」，不是模型名称。
-        // 兼容已有单接入点配置；新配置可分别指定 Seedream Flash / Pro Endpoint ID。
+        // API Key 可直接调用已开通的公开 Model ID，也支持自定义 Endpoint ID。
+        // 兼容已有单模型配置；可分别指定 Seedream Flash / Pro 模型或接入点。
         imageModel: process.env.ARK_IMAGE_MODEL || "",
         flashImageModel: process.env.ARK_IMAGE_MODEL_FLASH || "",
         proImageModel: process.env.ARK_IMAGE_MODEL_PRO || "",
