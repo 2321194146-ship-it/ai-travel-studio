@@ -4,8 +4,8 @@ import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { attachReferralOnRegister } from "@/lib/invite";
 import { generateInviteCode } from "@/lib/battle.mjs";
 
-// 注册赠送：约 2 张标准成片，让新用户在付费前先看到真实效果
-const SIGNUP_CREDITS = 4;
+// 注册赠送：够生成 1 张标准 1K 成片，让新用户先体验一次
+const SIGNUP_CREDITS = 2;
 
 export async function POST(request) {
   try {
