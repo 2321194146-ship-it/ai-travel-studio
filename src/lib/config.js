@@ -49,6 +49,8 @@ const config = {
       },
       ark: {
         apiKey: process.env.ARK_API_KEY,
+        // 允许视觉诊断使用另一方舟账号；未单独配置时继续兼容共用旧 Key。
+        visionApiKey: process.env.ARK_VISION_API_KEY || process.env.ARK_API_KEY,
         baseUrl: (
           process.env.ARK_BASE_URL ||
           "https://ark.cn-beijing.volces.com/api/v3"

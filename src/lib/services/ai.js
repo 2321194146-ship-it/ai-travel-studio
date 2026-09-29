@@ -721,7 +721,8 @@ export async function analyzeFace({ imageUrl }) {
   const imageData = await resolveImageData(imageUrl);
   const provider = config.ai.visionProvider;
   const candidate = config.ai.providers[provider];
-  if (!candidate?.apiKey || !candidate?.visionModel) {
+  const apiKey = candidate?.visionApiKey || candidate?.apiKey;
+  if (!apiKey || !candidate?.visionModel) {
     throw new AiError("Vision analysis failed", {
       provider,
       model: candidate?.visionModel || null,
@@ -731,7 +732,7 @@ export async function analyzeFace({ imageUrl }) {
   try {
     const text = await chatCompletion({
       baseUrl: candidate.baseUrl,
-      apiKey: candidate.apiKey,
+      apiKey,
       model: candidate.visionModel,
       systemPrompt: VISION_SYSTEM_PROMPT,
       userPrompt: VISION_USER_PROMPT,
@@ -754,7 +755,8 @@ export async function reviewFaceDiagnosis({ imageUrl, diagnosis }) {
   const imageData = await resolveImageData(imageUrl);
   const provider = diagnosis?.provider || config.ai.visionProvider;
   const candidate = config.ai.providers[provider];
-  if (!candidate?.apiKey || !candidate?.visionModel) {
+  const apiKey = candidate?.visionApiKey || candidate?.apiKey;
+  if (!apiKey || !candidate?.visionModel) {
     throw new AiError("Vision review failed", {
       provider,
       model: candidate?.visionModel || null,
@@ -764,7 +766,7 @@ export async function reviewFaceDiagnosis({ imageUrl, diagnosis }) {
   try {
     const text = await chatCompletion({
       baseUrl: candidate.baseUrl,
-      apiKey: candidate.apiKey,
+      apiKey,
       model: candidate.visionModel,
       systemPrompt: REVIEW_SYSTEM_PROMPT,
       userPrompt: `请独立复核下面的诊断草稿。有效发型库名称：\n${REPORT_HAIR_CATALOG.join("、")}\n穿搭库目录如下：\n${outfitCatalogPrompt()}\n\n原始诊断草稿 JSON：\n${JSON.stringify(diagnosis)}`,
