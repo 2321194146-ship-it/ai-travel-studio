@@ -905,6 +905,7 @@ const previewPhotos = [
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             imageUrls: [modelImageUrl, customHairUrl].filter(Boolean),
+            imageRoles: ["person_main", "reference"],
             destination: "发型试穿",
             hairName: "自定义发型",
             faceLock,
@@ -946,6 +947,7 @@ const previewPhotos = [
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             imageUrls: [modelImageUrl, hairImage].filter(Boolean),
+            imageRoles: hairImage ? ["person_main", "reference"] : ["person_main"],
             destination: "发型试穿",
             hairName,
             faceLock,

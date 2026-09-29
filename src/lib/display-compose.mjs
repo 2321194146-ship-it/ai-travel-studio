@@ -110,10 +110,12 @@ export function buildDisplayPrompt({
   hasReferenceOutfit = false,
 } = {}) {
   const lines = [];
+  const sceneReferenceIndex = personCount + 1;
+  const outfitReferenceIndex = personCount + 2;
   lines.push(
     mode === "reference"
-      ? "最后一张参考图是目标画面：生成的照片必须还原它的场景、背景、姿势、构图和光线，把画面中的人物替换成用户本人。"
-      : `最后一张参考图是平台模板「${templateName}」：生成的照片必须还原模板的场景、背景、姿势、构图和光线，把画面中的人物替换成用户本人。`,
+      ? `图${sceneReferenceIndex}是用户上传的目标画面：参考它的场景、背景、姿势、构图和光线，把画面中的人物替换成用户本人。`
+      : `图${sceneReferenceIndex}是平台模板「${templateName}」：参考它的场景、背景、姿势、构图和光线，把画面中的人物替换成用户本人。`,
   );
 
   if (background === "keep") lines.push("背景保持参考图原样。");
@@ -127,14 +129,14 @@ export function buildDisplayPrompt({
     lines.push(`服装风格改为：${String(customOutfit).trim()}。`);
 
   if (hasReferenceOutfit) {
-    lines.push("用户已上传一张衣服参考图（紧跟主参考图之后），请把画面中的人物替换为穿上这件参考衣服；保持人物相貌、姿势和场景不变。");
+    lines.push(`图${outfitReferenceIndex}是用户上传的衣服参考图，只参考衣服款式、颜色、版型和面料；请让本人穿上这件衣服，保持人物相貌、姿势和场景不变。`);
   }
 
   if (actionName) lines.push(`人物动作改为：${actionName}；其余画面尽量与参考图保持一致。`);
   lines.push(`整体风格：${mood}，真实生活抓拍质感。`);
   if (String(extraPrompt || "").trim()) lines.push(`补充要求：${String(extraPrompt).trim()}`);
   lines.push(
-    `图1到图${personCount}是同一个人的不同角度参考照片，生成的人物必须和这些照片是同一张脸，相似度${similarity}；最后一张参考图只提供场景、姿势和构图，忽略图中人物的相貌、穿着和背景。`,
+    `图1到图${personCount}是同一个人的本人照片，人物身份和脸部特征以这些照片为准，不能借用场景或衣服参考图中的人物相貌。图${sceneReferenceIndex}只提供场景、姿势、构图和光线；${hasReferenceOutfit ? `图${outfitReferenceIndex}只提供衣服信息；` : ""}相似度要求为${similarity}。`,
   );
   return lines.join(" ");
 }

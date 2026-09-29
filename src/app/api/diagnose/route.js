@@ -9,7 +9,7 @@ import { REPORT_HAIR_CATALOG, REPORT_OUTFIT_CATALOG } from "@/lib/makeover-catal
 import { diagnosisDetails, restoreDiagnosis } from "@/lib/diagnosis-storage.mjs";
 import { isAllowedImageReference } from "@/lib/image-access.mjs";
 
-const FACE_SHAPES = new Set(["圆形脸", "方形脸", "椭圆形脸", "心形脸", "长形脸", "菱形脸"]);
+const FACE_SHAPES = new Set(["圆形脸", "方形脸", "椭圆形脸", "心形脸", "长形脸", "菱形脸", "无法从这张照片确认"]);
 const REPORT_TEXT_FIELDS = ["suggestion", "focus", "goal", "hairReason", "outfitAdvice", "avoid", "inputQuality"];
 const hasReportText = (value, minimum = 1) =>
   typeof value === "string" && Array.from(value.trim()).length >= minimum;

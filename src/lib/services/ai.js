@@ -1,9 +1,9 @@
-// 统一 AI 服务层：阿里云千问（OpenAI 兼容接口）+ 火山方舟豆包（图片生成 API）
+// 统一 AI 服务层：保留千问、GPT-Image、豆包适配器；默认路由只调用豆包。
 //
 // 只允许在服务端使用，严禁被客户端组件 import。
 // - 所有 API Key 只来自服务器 .env，绝不进入前端 / 日志 / Git。
-// - 后端按档位自动路由模型：标准→千问图像、高清→豆包 Seedream、旗舰→豆包 Seedream/SeedEdit。
-// - 主模型失败自动切备用模型。
+// - 后端按档位选择模型：普通档优先 Seedream Flash，高档/旗舰/编辑优先 Seedream Pro。
+// - 仅在明确配置 fallback 时才跨供应商重试；默认失败即返回，不产生意外的第三方费用。
 // - 人脸照片只保存在服务器本地必要时间（TTL），并提供删除能力。
 
 import fs from "node:fs/promises";
@@ -423,24 +423,37 @@ const LEGACY_MODEL_TO_TIER = {
 function resolveRoute(tier, mode) {
   const t =
     tier === "high" ? "high" : tier === "flagship" ? "flagship" : "standard";
+  const getModel = (provider, selectedTier, explicitModel = "") => {
+    if (explicitModel) return explicitModel;
+    const providerConfig = config.ai.providers[provider];
+    if (!providerConfig) return "";
+    if (provider === "ark") {
+      if (selectedTier === "standard") {
+        return providerConfig.flashImageModel || providerConfig.imageModel;
+      }
+      return providerConfig.proImageModel || providerConfig.imageModel;
+    }
+    if (provider === "qwen" || provider === "gptimage") {
+      return providerConfig.imageModel;
+    }
+    return "";
+  };
+  const makeRoute = (route, selectedTier) => ({
+    provider: route.provider,
+    model: getModel(route.provider, selectedTier, route.model),
+    fallbackProvider: route.fallbackProvider || null,
+    fallbackModel: route.fallbackProvider
+      ? getModel(route.fallbackProvider, selectedTier, route.fallbackModel)
+      : "",
+    tier: selectedTier,
+  });
+
   if (mode === "edit") {
-    // 换发型 / 换衣服 / 局部细节 → 旗舰 SeedEdit（方舟图生图编辑），失败回退千问图像
-    return {
-      provider: "ark",
-      model: config.ai.providers.ark.imageModel,
-      fallbackProvider: "qwen",
-      fallbackModel: config.ai.providers.qwen.imageModel,
-      tier: "flagship",
-    };
+    // 编辑涉及本人脸部与身份一致性，使用 Pro 档；fallback 必须显式配置。
+    return makeRoute(config.ai.edit, "flagship");
   }
   const tc = config.ai.tiers[t];
-  return {
-    provider: tc.provider,
-    model: tc.model,
-    fallbackProvider: tc.fallbackProvider,
-    fallbackModel: tc.fallbackModel,
-    tier: t,
-  };
+  return makeRoute(tc, t);
 }
 
 function arkSizeFrom(resolution) {
@@ -534,7 +547,14 @@ export async function generateImages({
         count,
       });
     }
-    return generateQwenImage({ model, prompt, images: imagesData, count });
+    if (provider === "qwen") {
+      return generateQwenImage({ model, prompt, images: imagesData, count });
+    }
+    throw new AiError("Unsupported image provider", {
+      provider,
+      model,
+      reason: "unsupported_provider",
+    });
   };
 
   try {
@@ -615,7 +635,7 @@ const VISION_SYSTEM_PROMPT = `你是一位有审美判断和落地经验的男�
 只输出合法 JSON，不要 markdown，不要解释。字段必须包含：faceShape、faceBalance、jawline、score、aura、auraScore、camera、cameraScore、scoreReasons、suggestion、focus、goal、hairReason、outfitAdvice、avoid、actionPlan、hairstyles、outfits、styles、inputQuality、confidence。
 faceBalance 和 jawline 各用一句短句描述照片中可见的五官比例与下颌呈现；若角度、遮挡或光线影响判断，明确写“这张照片无法确认”，不可按脸型套结论。
 score、auraScore、cameraScore、confidence 是 0—100 整数；actionPlan 必须正好是 3 条可执行建议；hairstyles 和 outfits 至少返回 3 项、最多 5 项；styles 返回 2—3 项。
-faceShape 只能是：圆形脸、方形脸、椭圆形脸、心形脸、长形脸、菱形脸。`;
+faceShape 只能是：圆形脸、方形脸、椭圆形脸、心形脸、长形脸、菱形脸、无法从这张照片确认。照片角度、遮挡或清晰度不足以判断时，必须选择“无法从这张照片确认”，不能猜一个脸型。`;
 const VISION_USER_PROMPT = `请完成一次完整的男性形象改造诊断。先用一句话概括照片里最值得保留的优势，再写清楚当前最影响呈现的 1—2 个具体因素。focus 必须指向照片可见的问题，goal 必须对应一个清晰的改造目标，hairReason 和 outfitAdvice 必须解释“为什么适合他”，avoid 必须写明避雷项和原因。
 
 请把 scoreReasons 的三项分别对应 score、auraScore、cameraScore；每项都写 basis、strength、opportunity。inputQuality 写清楚照片是否适合诊断、影响判断的光线/角度/清晰度问题；confidence 是你对本次判断的把握度，不是用户的颜值。
@@ -641,7 +661,7 @@ const REVIEW_SYSTEM_PROMPT = `你是独立的男性形象诊断质量审核员�
 JSON 顶层格式：{"verdict":"approved 或 corrected","confidence":0到100整数,"notes":["简短审核说明"],"reviewedReport":{完整诊断对象}}。
 
 reviewedReport 必须满足与草稿相同的数据格式：
-- faceShape 必须逐字使用圆形脸、方形脸、椭圆形脸、心形脸、长形脸、菱形脸中的一项；偏方、偏长或不确定说明写入 faceBalance，不能附加到 faceShape。
+- faceShape 必须逐字使用圆形脸、方形脸、椭圆形脸、心形脸、长形脸、菱形脸或“无法从这张照片确认”；偏方、偏长写入 faceBalance，证据不足时选择无法确认，不得强行分类。
 - 保留 faceBalance、jawline、score、aura、auraScore、camera、cameraScore、confidence、inputQuality。四个分数与 confidence 均使用 0—100 整数。
 - suggestion、focus、goal、hairReason、outfitAdvice、avoid、inputQuality 各写 20—80 个中文字符，内容必须有照片依据；无法确认时说明原因，不能编造。
 - actionPlan 必须正好 3 条，每条 20—60 个中文字符，明确可执行动作。
@@ -699,108 +719,91 @@ function parseVisionJson(text) {
 
 export async function analyzeFace({ imageUrl }) {
   const imageData = await resolveImageData(imageUrl);
-  const failures = [];
-
-  const qwen = config.ai.providers.qwen;
-  if (qwen.apiKey && qwen.visionModel) {
-    try {
-      const text = await chatCompletion({
-        baseUrl: qwen.baseUrl,
-        apiKey: qwen.apiKey,
-        model: qwen.visionModel,
-        systemPrompt: VISION_SYSTEM_PROMPT,
-        userPrompt: VISION_USER_PROMPT,
-        images: [imageData],
-        temperature: 0.2,
-        maxTokens: 4096,
-        responseFormat: { type: "json_object" },
-      });
-      return { ...parseVisionJson(text), provider: "qwen", model: qwen.visionModel };
-    } catch (e) {
-      failures.push(`qwen:${safeError(e)}`);
-    }
+  const provider = config.ai.visionProvider;
+  const candidate = config.ai.providers[provider];
+  if (!candidate?.apiKey || !candidate?.visionModel) {
+    throw new AiError("Vision analysis failed", {
+      provider,
+      model: candidate?.visionModel || null,
+      reason: "not_configured",
+    });
   }
-
-  const ark = config.ai.providers.ark;
-  if (ark.apiKey && ark.visionModel) {
-    try {
-      const text = await chatCompletion({
-        baseUrl: ark.baseUrl,
-        apiKey: ark.apiKey,
-        model: ark.visionModel,
-        systemPrompt: VISION_SYSTEM_PROMPT,
-        userPrompt: VISION_USER_PROMPT,
-        images: [imageData],
-        temperature: 0.2,
-        maxTokens: 4096,
-        responseFormat: { type: "json_object" },
-      });
-      return { ...parseVisionJson(text), provider: "ark", model: ark.visionModel };
-    } catch (e) {
-      failures.push(`ark:${safeError(e)}`);
-    }
+  try {
+    const text = await chatCompletion({
+      baseUrl: candidate.baseUrl,
+      apiKey: candidate.apiKey,
+      model: candidate.visionModel,
+      systemPrompt: VISION_SYSTEM_PROMPT,
+      userPrompt: VISION_USER_PROMPT,
+      images: [imageData],
+      temperature: 0.2,
+      maxTokens: 4096,
+      responseFormat: { type: "json_object" },
+    });
+    return { ...parseVisionJson(text), provider, model: candidate.visionModel };
+  } catch (error) {
+    throw new AiError("Vision analysis failed", {
+      provider,
+      model: candidate.visionModel,
+      reason: safeError(error),
+    });
   }
-
-  throw new AiError("Vision analysis failed", {
-    reason: failures.length ? failures.join(" | ") : "not_configured",
-  });
 }
 
 export async function reviewFaceDiagnosis({ imageUrl, diagnosis }) {
   const imageData = await resolveImageData(imageUrl);
-  const preferred = diagnosis?.provider === "qwen" ? ["ark", "qwen"] : ["qwen", "ark"];
-  const available = preferred.filter((provider) => {
-    const candidate = config.ai.providers[provider];
-    return candidate?.apiKey && candidate?.visionModel;
-  });
-  const failures = [];
-
-  for (const provider of available) {
-    const candidate = config.ai.providers[provider];
-    try {
-      const text = await chatCompletion({
-        baseUrl: candidate.baseUrl,
-        apiKey: candidate.apiKey,
-        model: candidate.visionModel,
-        systemPrompt: REVIEW_SYSTEM_PROMPT,
-        userPrompt: `请独立复核下面的诊断草稿。有效发型库名称：\n${REPORT_HAIR_CATALOG.join("、")}\n穿搭库目录如下：\n${outfitCatalogPrompt()}\n\n原始诊断草稿 JSON：\n${JSON.stringify(diagnosis)}`,
-        images: [imageData],
-        temperature: 0.1,
-        maxTokens: 6144,
-        responseFormat: { type: "json_object" },
-      });
-      const result = parseModelObject(text, "review_bad_json");
-      const reviewed = result.reviewedReport || result.report;
-      if (!reviewed || typeof reviewed !== "object") {
-        throw new AiError("Vision review omitted reviewed report", { reason: "review_incomplete" });
-      }
-      if (!["approved", "corrected"].includes(result.verdict) || !Number.isInteger(Number(result.confidence)) || Number(result.confidence) < 0 || Number(result.confidence) > 100) {
-        throw new AiError("Vision review omitted its verdict or confidence", { reason: "review_incomplete" });
-      }
-      return {
-        ...parseVisionJson(JSON.stringify(reviewed)),
-        provider: diagnosis.provider,
-        model: diagnosis.model,
-        review: {
-          status: result.verdict === "corrected" ? "corrected" : "approved",
-          confidence: Number.isFinite(Number(result.confidence))
-            ? Math.min(Math.max(Math.round(Number(result.confidence)), 0), 100)
-            : null,
-          notes: Array.isArray(result.notes)
-            ? result.notes.filter((note) => typeof note === "string").slice(0, 4)
-            : [],
-          provider,
-          model: candidate.visionModel,
-        },
-      };
-    } catch (error) {
-      failures.push(`${provider}:${safeError(error)}`);
-    }
+  const provider = diagnosis?.provider || config.ai.visionProvider;
+  const candidate = config.ai.providers[provider];
+  if (!candidate?.apiKey || !candidate?.visionModel) {
+    throw new AiError("Vision review failed", {
+      provider,
+      model: candidate?.visionModel || null,
+      reason: "review_not_configured",
+    });
   }
-
-  throw new AiError("Vision review failed", {
-    reason: failures.length ? failures.join(" | ") : "review_not_configured",
-  });
+  try {
+    const text = await chatCompletion({
+      baseUrl: candidate.baseUrl,
+      apiKey: candidate.apiKey,
+      model: candidate.visionModel,
+      systemPrompt: REVIEW_SYSTEM_PROMPT,
+      userPrompt: `请独立复核下面的诊断草稿。有效发型库名称：\n${REPORT_HAIR_CATALOG.join("、")}\n穿搭库目录如下：\n${outfitCatalogPrompt()}\n\n原始诊断草稿 JSON：\n${JSON.stringify(diagnosis)}`,
+      images: [imageData],
+      temperature: 0.1,
+      maxTokens: 6144,
+      responseFormat: { type: "json_object" },
+    });
+    const result = parseModelObject(text, "review_bad_json");
+    const reviewed = result.reviewedReport || result.report;
+    if (!reviewed || typeof reviewed !== "object") {
+      throw new AiError("Vision review omitted reviewed report", { reason: "review_incomplete" });
+    }
+    if (!["approved", "corrected"].includes(result.verdict) || !Number.isInteger(Number(result.confidence)) || Number(result.confidence) < 0 || Number(result.confidence) > 100) {
+      throw new AiError("Vision review omitted its verdict or confidence", { reason: "review_incomplete" });
+    }
+    return {
+      ...parseVisionJson(JSON.stringify(reviewed)),
+      provider: diagnosis.provider,
+      model: diagnosis.model,
+      review: {
+        status: result.verdict === "corrected" ? "corrected" : "approved",
+        confidence: Number.isFinite(Number(result.confidence))
+          ? Math.min(Math.max(Math.round(Number(result.confidence)), 0), 100)
+          : null,
+        notes: Array.isArray(result.notes)
+          ? result.notes.filter((note) => typeof note === "string").slice(0, 4)
+          : [],
+        provider,
+        model: candidate.visionModel,
+      },
+    };
+  } catch (error) {
+    throw new AiError("Vision review failed", {
+      provider,
+      model: candidate.visionModel,
+      reason: safeError(error),
+    });
+  }
 }
 
 // ── 保存生成结果到本地并返回可访问 URL ───────────────────────

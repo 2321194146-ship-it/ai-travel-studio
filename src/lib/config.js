@@ -36,7 +36,7 @@ const config = {
     },
   },
   ai: {
-    // 供应商：阿里云百炼千问（OpenAI 兼容）+ 火山方舟豆包
+    // 三家适配器保留；默认路由只走火山方舟豆包，可通过 AI_*_PROVIDER 配置切换。
     providers: {
       qwen: {
         apiKey: process.env.QWEN_API_KEY,
@@ -54,52 +54,54 @@ const config = {
           "https://ark.cn-beijing.volces.com/api/v3"
         ).replace(/\/+$/, ""),
         // 注意：方舟模型必须填控制台创建的「推理接入点 Endpoint ID」，不是模型名称。
+        // 兼容已有单接入点配置；新配置可分别指定 Seedream Flash / Pro Endpoint ID。
         imageModel: process.env.ARK_IMAGE_MODEL || "",
+        flashImageModel: process.env.ARK_IMAGE_MODEL_FLASH || "",
+        proImageModel: process.env.ARK_IMAGE_MODEL_PRO || "",
         visionModel: process.env.ARK_VISION_MODEL || "",
       },
-      // GPT-Image：本机 CLIProxyAPI（systemd: cliproxy-api，经 mihomo 美国节点出海）
-      // 仅展示面生图链路使用；发型/穿搭仍走 qwen/ark。
+      // GPT-Image adapter 保留，默认不调用。
       gptimage: {
         apiKey: process.env.GPTIMAGE_API_KEY,
         baseUrl: (process.env.GPTIMAGE_BASE_URL || "http://127.0.0.1:8317/v1").replace(/\/+$/, ""),
         imageModel: process.env.GPTIMAGE_MODEL || "gpt-image-2",
       },
     },
-    // 档位 → 主供应商/备用供应商（自动切换）
+    // 默认只调用豆包。其他供应商 adapter 保留，可用环境变量切换；fallback 默认关闭。
     tiers: {
-      // 标准档 → 豆包（千问生图模型当前无权限 403，留作回退）；高清档 → 豆包；旗舰档 → GPT-Image（订阅额度，效果最好）
-      // GPT-Image 走本机 CLIProxyAPI 8317（经 mihomo 美国节点出海）
+      // 普通档优先使用单独配置的 Seedream Flash 接入点；未配置时兼容旧豆包接入点。
       standard: {
-        provider: "ark",
-        model: process.env.ARK_IMAGE_MODEL || "",
-        // 当前 Qwen 图像模型返回 AccessDenied.Unpurchased，不作为生图回退。
-        fallbackProvider: null,
-        fallbackModel: "",
+        provider: process.env.AI_STANDARD_IMAGE_PROVIDER || "ark",
+        model: process.env.AI_STANDARD_IMAGE_MODEL || "",
+        fallbackProvider: process.env.AI_STANDARD_IMAGE_FALLBACK_PROVIDER || null,
+        fallbackModel: process.env.AI_STANDARD_IMAGE_FALLBACK_MODEL || "",
         cost: { "1k": 2, "2k": 3, "4k": 4 },
       },
+      // 高清和旗舰档使用 Seedream Pro；未配置独立接入点时兼容旧豆包接入点。
       high: {
-        provider: "ark",
-        model: process.env.ARK_IMAGE_MODEL || "",
-        // 当前 Qwen 图像模型返回 AccessDenied.Unpurchased，不作为生图回退。
-        fallbackProvider: null,
-        fallbackModel: "",
+        provider: process.env.AI_HIGH_IMAGE_PROVIDER || "ark",
+        model: process.env.AI_HIGH_IMAGE_MODEL || "",
+        fallbackProvider: process.env.AI_HIGH_IMAGE_FALLBACK_PROVIDER || null,
+        fallbackModel: process.env.AI_HIGH_IMAGE_FALLBACK_MODEL || "",
         cost: { "1k": 4, "2k": 6, "4k": 8 },
       },
       flagship: {
-        provider: "gptimage",
-        model: process.env.GPTIMAGE_MODEL || "gpt-image-2",
-        fallbackProvider: "ark",
-        fallbackModel: process.env.ARK_IMAGE_MODEL || "",
+        provider: process.env.AI_FLAGSHIP_IMAGE_PROVIDER || "ark",
+        model: process.env.AI_FLAGSHIP_IMAGE_MODEL || "",
+        fallbackProvider: process.env.AI_FLAGSHIP_IMAGE_FALLBACK_PROVIDER || null,
+        fallbackModel: process.env.AI_FLAGSHIP_IMAGE_FALLBACK_MODEL || "",
         cost: { "1k": 6, "2k": 9, "4k": 12 },
       },
     },
-    // 换发型 / 换衣服 / 局部细节编辑 → 旗舰 SeedEdit；当前 Qwen 图像权限未开通，不作为回退。
+    // 发型、穿搭和局部编辑默认使用豆包 Pro；跨供应商 fallback 默认关闭。
     edit: {
-      provider: "ark",
-      model: process.env.ARK_IMAGE_MODEL || "",
-      fallbackProvider: null,
-      fallbackModel: "",
+      provider: process.env.AI_EDIT_IMAGE_PROVIDER || "ark",
+      model: process.env.AI_EDIT_IMAGE_MODEL || "",
+      fallbackProvider: process.env.AI_EDIT_IMAGE_FALLBACK_PROVIDER || null,
+      fallbackModel: process.env.AI_EDIT_IMAGE_FALLBACK_MODEL || "",
     },
+    // 诊断草稿与复核固定使用同一个可配置供应商；默认为豆包，不自动跨供应商。
+    visionProvider: process.env.AI_VISION_PROVIDER || "ark",
   },
 };
 

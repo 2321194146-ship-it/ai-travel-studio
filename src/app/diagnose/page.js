@@ -171,7 +171,7 @@ export default function DiagnosePage() {
                   <p className="text-2xl font-bold text-amber-400">{result.faceShape}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-zinc-400 text-xs mb-1">形象评分</p>
+                  <p className="text-zinc-400 text-xs mb-1">照片呈现参考分</p>
                   <div className="flex items-center gap-1">
                     <FaStar className="text-amber-400" />
                     <span className="text-3xl font-bold">{result.score}</span>
