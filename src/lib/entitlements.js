@@ -92,19 +92,41 @@ export async function grantPlanToUser(tx, userId, plan, sourceType, sourceId) {
 export async function redeemCodeForUser(userId, code) {
   const normalized = String(code || "").trim().toUpperCase();
   if (!/^XNM-[A-Z0-9]{5}(-[A-Z0-9]{5}){3}$/.test(normalized)) throw new Error("卡密格式不正确");
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const redeem = await tx.redeemCode.findUnique({ where: { codeHash: hashRedeemCode(normalized) } });
     if (!redeem) throw new Error("卡密不存在");
     if (redeem.status !== "ACTIVE") throw new Error("卡密已使用或已失效");
-    if (redeem.expiresAt && redeem.expiresAt <= new Date()) {
-      await tx.redeemCode.update({ where: { id: redeem.id }, data: { status: "EXPIRED" } });
-      throw new Error("卡密已过期");
+    const now = new Date();
+    if (redeem.expiresAt && redeem.expiresAt <= now) {
+      await tx.redeemCode.updateMany({ where: { id: redeem.id, status: "ACTIVE" }, data: { status: "EXPIRED" } });
+      return { error: "卡密已过期" };
     }
     const plan = getPlan(redeem.planId);
     if (!plan) throw new Error("卡密套餐不存在");
-    if (isServicePlan(plan)) throw new Error("服务商品不能通过卡密兑换");
+    if (!getPublicPlans().some((publicPlan) => publicPlan.id === plan.id) || isServicePlan(plan)) {
+      throw new Error("该套餐不能通过兑换码兑换");
+    }
+
+    // Compare-and-set claims the code once; concurrent submissions cannot both grant benefits.
+    const claimed = await tx.redeemCode.updateMany({
+      where: {
+        id: redeem.id,
+        status: "ACTIVE",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      data: { status: "REDEEMED", redeemedAt: now, redeemedById: userId },
+    });
+    if (claimed.count !== 1) {
+      const latest = await tx.redeemCode.findUnique({ where: { id: redeem.id }, select: { status: true, expiresAt: true } });
+      if (latest?.status === "ACTIVE" && latest.expiresAt && latest.expiresAt <= now) {
+        await tx.redeemCode.updateMany({ where: { id: redeem.id, status: "ACTIVE" }, data: { status: "EXPIRED" } });
+        return { error: "卡密已过期" };
+      }
+      return { error: "卡密已使用或已失效" };
+    }
     const user = await grantPlanToUser(tx, userId, plan, "REDEEM", redeem.id);
-    await tx.redeemCode.update({ where: { id: redeem.id }, data: { status: "REDEEMED", redeemedAt: new Date(), redeemedById: userId } });
     return { plan, user };
   });
+  if (result.error) throw new Error(result.error);
+  return result;
 }

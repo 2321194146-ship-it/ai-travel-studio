@@ -16,5 +16,5 @@ test("普通账号显示未开通会员，会员显示真实档位", () => {
 });
 
 test("个人页工具只保留已经有真实数据来源的入口，充值中心直达充值页", () => {
-  assert.deepEqual(profileToolNames(), ["照片档案", "生成记录", "购买记录", "充值中心"]);
+  assert.deepEqual(profileToolNames(), ["照片档案", "生成记录", "购买记录", "兑换码"]);
 });

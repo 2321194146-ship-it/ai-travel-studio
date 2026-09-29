@@ -12,6 +12,7 @@ const navItems = [
   ["generations", "生成记录", "失败排查与成本"],
   ["circle", "圈子审核", "内容发布"],
   ["subsites", "分站", "代理与积分"],
+  ["redeemCodes", "兑换码", "批量发放与使用状态"],
   ["audit", "操作日志", "管理员动作追踪"],
 ];
 const servicePlans = Object.keys(SERVICE_PLAN_CATALOG);
@@ -27,7 +28,7 @@ function fmtDate(value) {
 function money(cents) { return `¥${((Number(cents) || 0) / 100).toFixed(2)}`; }
 function displayUser(user) { return user?.phone || user?.email || user?.name || user?.id?.slice(0, 10) || "未绑定用户"; }
 function statusText(status) {
-  return { PAID: "已支付", PENDING: "待处理", CANCELLED: "已取消", REFUNDED: "已退款", completed: "成功", processing: "处理中", failed: "失败", PUBLISHED: "已发布", REJECTED: "已驳回" }[status] || status || "未知";
+  return { PAID: "已支付", PENDING: "待处理", CANCELLED: "已取消", REFUNDED: "已退款", completed: "成功", processing: "处理中", failed: "失败", PUBLISHED: "已发布", REJECTED: "已驳回", ACTIVE: "未使用", REDEEMED: "已兑换", REVOKED: "已撤销", EXPIRED: "已过期" }[status] || status || "未知";
 }
 function StatusBadge({ status }) { return <span className={`admin-badge admin-badge-${String(status || "unknown").toLowerCase()}`}>{statusText(status)}</span>; }
 
@@ -36,6 +37,31 @@ function Empty({ title = "暂无数据", text = "当前筛选条件下没有记�
 }
 
 function Loading() { return <div className="admin-loading"><span className="admin-spinner" />正在读取后台数据…</div>; }
+
+function RedeemCodes({ rows, total, offset, setOffset, plans: redeemPlans, form, setForm, onGenerate, generating, generatedCodes, onCopy, filters, setFilters, onSearch }) {
+  return <>
+    <section className="admin-panel">
+      <div className="admin-panel-head"><div><span className="admin-eyebrow">MEMBERSHIP & CREDITS</span><h2>批量生成兑换码</h2></div></div>
+      <form className="admin-form-grid" onSubmit={onGenerate}>
+        <label>兑换内容<select value={form.planId} onChange={(event) => setForm({ ...form, planId: event.target.value })}>{redeemPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.membershipDays ? `${plan.membershipDays} 天会员` : "次数包"} · {plan.credits} 次</option>)}</select></label>
+        <label>生成数量<input type="number" min="1" max="100" required value={form.count} onChange={(event) => setForm({ ...form, count: event.target.value })} /></label>
+        <label>有效天数<input type="number" min="0" max="3650" required value={form.expiresInDays} onChange={(event) => setForm({ ...form, expiresInDays: event.target.value })} /><small>填 0 表示永不过期</small></label>
+        <button className="primary" type="submit" disabled={generating || !redeemPlans.length}>{generating ? "生成中…" : "生成兑换码"}</button>
+      </form>
+      <p className="admin-form-hint">兑换码可兑换会员套餐或生成次数。明文只在生成成功后显示一次，请先复制保存；系统仅保存哈希，之后无法查看完整兑换码。</p>
+      {generatedCodes.length > 0 && <div className="admin-issued-codes"><div><b>本次生成的兑换码</b><button className="admin-small-button" type="button" onClick={onCopy}>复制全部</button></div><textarea aria-label="本次生成的兑换码" readOnly value={generatedCodes.join("\n")} rows={Math.min(generatedCodes.length, 12)} /><small>离开此页或刷新后，明文不再显示。</small></div>}
+    </section>
+    <section className="admin-panel">
+      <div className="admin-panel-head"><div><span className="admin-eyebrow">REDEMPTION STATUS</span><h2>兑换码使用状况</h2></div><span className="admin-count">共 {total} 条 · 当前 {total ? `${offset + 1}-${offset + rows.length}` : 0} 条</span></div>
+      <Filters onSearch={onSearch}><input placeholder="套餐名称 / 末四位" value={filters.q} onChange={(event) => { setFilters({ ...filters, q: event.target.value }); setOffset(0); }} /><select value={filters.status} onChange={(event) => { setFilters({ ...filters, status: event.target.value }); setOffset(0); }}><option value="">全部状态</option><option value="ACTIVE">未使用</option><option value="REDEEMED">已兑换</option><option value="EXPIRED">已过期</option><option value="REVOKED">已撤销</option></select></Filters>
+      <div className="admin-table-wrap"><table className="admin-data-table admin-redeem-table"><thead><tr><th>兑换码</th><th>兑换内容</th><th>创建时间</th><th>有效期</th><th>状态 / 使用人</th></tr></thead><tbody>{rows.map((row) => {
+        const rewards = [row.membershipDays > 0 ? `${row.membershipDays} 天会员` : "", row.credits > 0 ? `${row.credits} 次` : ""].filter(Boolean).join(" + ");
+        return <tr key={row.id}><td data-label="兑换码"><b className="admin-code-last4">•••• · {row.codeLast4}</b><small>仅显示末四位</small></td><td data-label="兑换内容"><b>{row.planName}</b><small>{rewards || "—"}</small></td><td data-label="创建时间">{fmtDate(row.createdAt)}</td><td data-label="有效期">{row.expiresAt ? fmtDate(row.expiresAt) : "永不过期"}</td><td data-label="状态 / 使用人"><StatusBadge status={row.effectiveStatus || row.status} />{row.redeemedBy && <small>{displayUser(row.redeemedBy)} · {fmtDate(row.redeemedAt)}</small>}</td></tr>;
+      })}</tbody></table>{!rows.length && <Empty title="暂无兑换码记录" text="生成兑换码后，会在这里查看使用状态。" />}</div>
+      {total > 50 && <div className="admin-redeem-pagination"><button className="admin-small-button" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>上一页</button><button className="admin-small-button" type="button" disabled={offset + rows.length >= total} onClick={() => setOffset(offset + 50)}>下一页</button></div>}
+    </section>
+  </>;
+}
 
 export default function AdminPage() {
   const { status } = useSession();
@@ -48,6 +74,13 @@ export default function AdminPage() {
   const [circlePosts, setCirclePosts] = useState([]);
   const [subsites, setSubsites] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [redeemCodes, setRedeemCodes] = useState([]);
+  const [redeemPlans, setRedeemPlans] = useState([]);
+  const [redeemTotal, setRedeemTotal] = useState(0);
+  const [redeemOffset, setRedeemOffset] = useState(0);
+  const [redeemForm, setRedeemForm] = useState({ planId: "trial", count: "10", expiresInDays: "0" });
+  const [generatedCodes, setGeneratedCodes] = useState([]);
+  const [generatingCodes, setGeneratingCodes] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -69,7 +102,7 @@ export default function AdminPage() {
     return data;
   }, []);
 
-  const loadView = useCallback(async (nextView = view) => {
+  const loadView = useCallback(async (nextView = view, pageOffset = redeemOffset) => {
     setLoading(true);
     try {
       if (nextView === "dashboard") {
@@ -101,13 +134,24 @@ export default function AdminPage() {
       } else if (nextView === "audit") {
         const params = filters.q ? `?q=${encodeURIComponent(filters.q)}` : "";
         setAuditLogs((await fetchJson(`/api/admin/audit${params}`)).data || []);
+      } else if (nextView === "redeemCodes") {
+        const params = new URLSearchParams({ limit: "50", offset: String(pageOffset) });
+        if (filters.q) params.set("q", filters.q);
+        if (filters.status) params.set("status", filters.status);
+        const result = await fetchJson(`/api/admin/redeem-codes?${params}`);
+        setRedeemCodes(result.data || []);
+        setRedeemPlans(result.plans || []);
+        setRedeemTotal(Number(result.total) || 0);
+        if (result.plans?.length && !result.plans.some((plan) => plan.id === redeemForm.planId)) {
+          setRedeemForm((form) => ({ ...form, planId: result.plans[0].id }));
+        }
       }
     } catch (error) {
       notify(error.message, "error");
     } finally {
       setLoading(false);
     }
-  }, [fetchJson, filters.deliveryStatus, filters.membership, filters.orderType, filters.q, filters.status, filters.tier, notify, view]);
+  }, [fetchJson, filters.deliveryStatus, filters.membership, filters.orderType, filters.q, filters.status, filters.tier, notify, redeemForm.planId, redeemOffset, view]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login?next=/admin");
@@ -119,6 +163,8 @@ export default function AdminPage() {
   }, [loadView, router, status, view]);
 
   function changeView(next) {
+    if (next !== "redeemCodes") setGeneratedCodes([]);
+    setRedeemOffset(0);
     setView(next);
     setMobileNav(false);
     setFilters({ q: "", status: "", tier: "", membership: "", orderType: "", deliveryStatus: "" });
@@ -158,6 +204,35 @@ export default function AdminPage() {
       notify("人工订单已登记");
       loadView("orders");
     } catch (error) { notify(error.message, "error"); }
+  }
+
+  async function generateRedeemCodes(event) {
+    event.preventDefault();
+    setGeneratingCodes(true);
+    try {
+      const result = await fetchJson("/api/admin/redeem-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(redeemForm),
+      });
+      setGeneratedCodes(result.data?.codes || []);
+      setRedeemOffset(0);
+      notify(`已生成 ${result.data?.count || 0} 个${result.data?.planName || ""}兑换码，请立即复制保存`);
+      await loadView("redeemCodes", 0);
+    } catch (error) {
+      notify(error.message, "error");
+    } finally {
+      setGeneratingCodes(false);
+    }
+  }
+
+  async function copyGeneratedCodes() {
+    try {
+      await navigator.clipboard.writeText(generatedCodes.join("\n"));
+      notify(`已复制 ${generatedCodes.length} 个兑换码`);
+    } catch {
+      notify("复制失败，请选中兑换码手动复制", "error");
+    }
   }
 
   async function updateOrder(order, nextStatus, extra = {}) {
@@ -216,7 +291,7 @@ export default function AdminPage() {
       <header className="admin-topbar">
         <button className="admin-menu-button" onClick={() => setMobileNav(true)}>☰</button>
         <div><span className="admin-eyebrow">型男制造机 · ADMIN</span><h1>{navItems.find(([key]) => key === view)?.[1]}</h1></div>
-        <div className="admin-top-actions"><span className="admin-live-dot">系统正常</span><button onClick={() => loadView(view)}>刷新</button></div>
+        <div className="admin-top-actions"><span className="admin-live-dot">系统正常</span><button onClick={() => { if (view === "redeemCodes") setGeneratedCodes([]); loadView(view); }}>刷新</button></div>
       </header>
       {toast && <div className={`admin-toast ${toast.type}`} role="status">{toast.type === "error" ? "!" : "✓"}<span>{toast.text}</span></div>}
       <div className="admin-content">
@@ -227,6 +302,7 @@ export default function AdminPage() {
           {view === "generations" && <Generations rows={generations} filters={filters} setFilters={setFilters} onSearch={() => loadView("generations")} onOpen={openUser} />}
           {view === "circle" && <Circle posts={circlePosts} pending={pendingCircle} onModerate={moderate} />}
           {view === "subsites" && <Subsites subsites={subsites} notify={notify} onReload={() => loadView("subsites")} />}
+          {view === "redeemCodes" && <RedeemCodes rows={redeemCodes} total={redeemTotal} offset={redeemOffset} setOffset={setRedeemOffset} plans={redeemPlans} form={redeemForm} setForm={setRedeemForm} onGenerate={generateRedeemCodes} generating={generatingCodes} generatedCodes={generatedCodes} onCopy={copyGeneratedCodes} filters={filters} setFilters={setFilters} onSearch={() => loadView("redeemCodes")} />}
           {view === "audit" && <Audit logs={auditLogs} filters={filters} setFilters={setFilters} onSearch={() => loadView("audit")} />}
         </>}
       </div>

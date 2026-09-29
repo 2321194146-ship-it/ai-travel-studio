@@ -16,5 +16,5 @@ export function membershipCopy(user) {
 }
 
 export function profileToolNames() {
-  return ["照片档案", "生成记录", "购买记录", "充值中心"];
+  return ["照片档案", "生成记录", "购买记录", "兑换码"];
 }

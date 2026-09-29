@@ -43,6 +43,7 @@ import {
   FaShareAlt,
   FaSignal,
   FaTshirt,
+  FaTicketAlt,
   FaSyncAlt,
   FaUser,
   FaUsers,
@@ -3272,6 +3273,8 @@ function ProfileScreen({ user, creationRecords = [], profilePhotoCount = 0, onNo
   const [nameInput, setNameInput] = useState(user?.name || "");
   const [saving, setSaving] = useState(false);
   const [activeTool, setActiveTool] = useState(onForceOpenTool || "");
+  const [redeemInput, setRedeemInput] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
   useEffect(() => {
     if (!onForceOpenTool) return undefined;
     const frame = window.requestAnimationFrame(() => setActiveTool(onForceOpenTool));
@@ -3339,7 +3342,39 @@ function ProfileScreen({ user, creationRecords = [], profilePhotoCount = 0, onNo
     }
   }
 
-  const toolIcons = { "照片档案": <FaUser />, "生成记录": <FaImage />, "购买记录": <FaBars />, "充值中心": <FaPlus /> };
+  async function submitRedeemCode(event) {
+    event.preventDefault();
+    if (!user) {
+      window.location.assign("/login?callbackUrl=%2F");
+      return;
+    }
+    const code = redeemInput.trim().toUpperCase();
+    if (!code) return onNotice("请输入兑换码");
+    setRedeeming(true);
+    try {
+      const response = await fetch("/api/redeem-codes/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "兑换失败，请稍后重试");
+      onUserUpdated?.({ ...user, ...payload.data.user });
+      setRedeemInput("");
+      const { plan } = payload.data;
+      const rewards = [
+        plan.membershipDays > 0 ? `会员有效期增加 ${plan.membershipDays} 天` : "",
+        plan.credits > 0 ? `增加 ${plan.credits} 次生成额度` : "",
+      ].filter(Boolean).join("，");
+      onNotice(`兑换成功：${plan.name}${rewards ? `，${rewards}` : ""}`);
+    } catch (error) {
+      onNotice(error.message || "兑换失败，请稍后重试");
+    } finally {
+      setRedeeming(false);
+    }
+  }
+
+  const toolIcons = { "照片档案": <FaUser />, "生成记录": <FaImage />, "购买记录": <FaBars />, "兑换码": <FaTicketAlt /> };
   const featureNames = { makeover: "变帅改造", display: "生活展示面" };
   return (
     <section className="mf-screen mf-profile-screen">
@@ -3414,7 +3449,7 @@ function ProfileScreen({ user, creationRecords = [], profilePhotoCount = 0, onNo
       <div className="mf-profile-section-head"><b>我的工具</b></div>
       <div className="mf-tools-grid">
         {profileToolNames().map((item) => (
-          <button key={item} onClick={() => item === "照片档案" ? onOpenPhotos() : item === "充值中心" ? onOpenPricing() : setActiveTool((current) => current === item ? "" : item)}>
+          <button key={item} onClick={() => item === "照片档案" ? onOpenPhotos() : setActiveTool((current) => current === item ? "" : item)}>
             <span>{toolIcons[item]}</span>
             <b>{item}</b>
           </button>
@@ -3442,6 +3477,14 @@ function ProfileScreen({ user, creationRecords = [], profilePhotoCount = 0, onNo
                 );
               })}</ul> : <small>暂无真实生成记录。完成一次 AI 生成后会自动显示在这里。</small>}</div>}
       {activeTool === "购买记录" && <div className="mf-profile-data-panel"><b>真实购买记录</b>{orders.length ? orders.map((order) => <div key={order.id}><span>{order.planName}</span><small>¥{(order.amount / 100).toFixed(2)} · {order.status === "PAID" ? "已开通" : order.status === "REFUNDED" ? "已退款" : order.status === "CANCELLED" ? "已取消" : "待支付"} · {new Date(order.createdAt).toLocaleDateString("zh-CN")}</small></div>) : <small>{user ? "暂无购买记录" : "登录后查看购买记录"}</small>}</div>}
+      {activeTool === "兑换码" && <div className="mf-profile-data-panel">
+        <b>兑换会员 / 生成次数</b>
+        <small>输入兑换码后，将按兑换码内容开通会员或增加生成次数。</small>
+        {user ? <form className="mf-redeem-card" onSubmit={submitRedeemCode}>
+          <div><b>兑换码</b><small>每个兑换码仅可使用一次</small></div>
+          <div><input value={redeemInput} maxLength={27} autoCapitalize="characters" autoComplete="off" spellCheck="false" placeholder="XNM-XXXXX-XXXXX-XXXXX-XXXXX" aria-label="兑换码" onChange={(event) => setRedeemInput(event.target.value.toUpperCase())} /><button type="submit" disabled={redeeming}>{redeeming ? "兑换中…" : "立即兑换"}</button></div>
+        </form> : <button className="mf-redeem-login" onClick={() => window.location.assign("/login?callbackUrl=%2F")}>登录后兑换</button>}
+      </div>}
       <div className="mf-profile-section-head"><b>服务中心</b></div>
       <div className="mf-service-list">
         {SERVICE_CATALOG.map((service) => (
